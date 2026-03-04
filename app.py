@@ -12,7 +12,7 @@ if not hasattr(scipy.linalg, 'triu'):
     scipy.linalg.triu = np.triu
 
 # Import the new model utility functions
-from model_utils import load_prediction_models, analyze_product_fully
+from model_utils import load_prediction_models, analyze_product_fully, preprocess_batch_excel_data
 
 import easyocr
 
@@ -719,6 +719,10 @@ elif app_mode == "Analisis Batch (Excel)":
     
     if uploaded_excel:
         df = pd.read_excel(uploaded_excel)
+        
+        # Preprocess the batch data to clean units and handle decimal separators
+        df = preprocess_batch_excel_data(df)
+        
         st.dataframe(df)
         
         # Verify columns exist
@@ -736,12 +740,12 @@ elif app_mode == "Analisis Batch (Excel)":
                 with st.spinner(f"Menganalisis {total_rows} produk..."):
                     for i, row in df.iterrows():
                         nutrition_data = {
-                            'energi': row.get('Energi', 0),
-                            'lemak_total': row.get('Lemak', 0),
-                            'karbohidrat': row.get('Karbohidrat', 0),
-                            'gula': row.get('Gula', 0),
-                            'protein': row.get('Protein', 0),
-                            'garam': row.get('Garam', 0)
+                            'energi': float(row.get('Energi', 0)),
+                            'lemak_total': float(row.get('Lemak', 0)),
+                            'karbohidrat': float(row.get('Karbohidrat', 0)),
+                            'gula': float(row.get('Gula', 0)),
+                            'protein': float(row.get('Protein', 0)),
+                            'garam': float(row.get('Garam', 0))
                         }
                         composition_text = row.get('Komposisi', "")
 
