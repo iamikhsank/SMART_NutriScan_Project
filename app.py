@@ -709,19 +709,11 @@ elif app_mode == "Analisis Batch (Excel)":
     st.header("Analisis Batch Produk dari File Excel")
     st.write("Unggah file Excel dengan daftar produk dan informasi nutrisinya untuk dianalisis secara bersamaan.")
     
-    expected_columns_map = {
-        'Energi (kkal)': 'energi',
-        'Lemak Total (g)': 'lemak_total',
-        'Lemak Jenuh (g)': 'lemak_jenuh',
-        'Protein (g)': 'protein',
-        'Karbohidrat (g)': 'karbohidrat',
-        'Gula (g)': 'gula',
-        'Garam (g)': 'garam',
-        'Natrium (mg)': 'natrium',
-        'Komposisi': 'komposisi'
-    }
+    expected_columns = [
+        'Energi', 'Lemak', 'Karbohidrat', 'Gula', 'Protein', 'Garam', 'Komposisi'
+    ]
     
-    st.info(f"Pastikan file Excel Anda memiliki kolom: {', '.join(expected_columns_map.keys())}")
+    st.info(f"Pastikan file Excel Anda memiliki kolom: {', '.join(expected_columns)}")
 
     uploaded_excel = st.file_uploader("Pilih file .xlsx", type=["xlsx"])
     
@@ -730,7 +722,7 @@ elif app_mode == "Analisis Batch (Excel)":
         st.dataframe(df)
         
         # Verify columns exist
-        missing_cols = [col for col in expected_columns_map.keys() if col not in df.columns]
+        missing_cols = [col for col in expected_columns if col not in df.columns]
         if missing_cols:
             st.error(f"File Excel tidak memiliki kolom yang dibutuhkan: {', '.join(missing_cols)}")
         else:
@@ -743,7 +735,14 @@ elif app_mode == "Analisis Batch (Excel)":
                 
                 with st.spinner(f"Menganalisis {total_rows} produk..."):
                     for i, row in df.iterrows():
-                        nutrition_data = {v: row.get(k, 0) for k, v in expected_columns_map.items() if v != 'komposisi'}
+                        nutrition_data = {
+                            'energi': row.get('Energi', 0),
+                            'lemak_total': row.get('Lemak', 0),
+                            'karbohidrat': row.get('Karbohidrat', 0),
+                            'gula': row.get('Gula', 0),
+                            'protein': row.get('Protein', 0),
+                            'garam': row.get('Garam', 0)
+                        }
                         composition_text = row.get('Komposisi', "")
 
                         risk_score, _, _ = analyze_product_fully(

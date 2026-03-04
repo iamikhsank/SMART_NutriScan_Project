@@ -196,7 +196,7 @@ def analyze_product_fully(nutrition_data, composition_text, feat_model, lgbm_mod
         # Map input data to the correct order, using 0 for missing values.
         # Note: 'Kemasan' and 'Natrium Benzoat' are not in the UI, so we default them.
         # Also, the UI has 'lemak_total', but the model was trained on 'Lemak'. We'll map it.
-        input_numeric_df = pd.DataFrame([{ 
+        input_numeric_df = pd.DataFrame([{
             "Kemasan": 0, # Placeholder, as it's not in the UI
             "Energi": nutrition_data.get('energi', 0),
             "Lemak": nutrition_data.get('lemak_total', 0),
