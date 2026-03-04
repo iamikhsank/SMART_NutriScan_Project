@@ -249,6 +249,107 @@ def parse_nutrition_text(text):
 
     return data
 
+# --- FUNGSI HELPER UNTUK VISUALISASI BI & HEALTH METRICS ---
+def render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, user_profile):
+    st.markdown("---")
+    st.markdown("### 📊 Profil Gizi & Makronutrien Holistik")
+    st.write("Analisis mendalam mengenai sumber kalori dan dampak glikemik berdasarkan takaran saji.")
+
+    # 1. Row Atas: Kepadatan Energi & Rasio Glikemik
+    metrik_col1, metrik_col2 = st.columns(2)
+
+    with metrik_col1:
+        kepadatan_energi = energi / takaran_saji if takaran_saji > 0 else 0
+
+        # Klasifikasi Kepadatan Energi
+        if kepadatan_energi > 4:
+            kepadatan_status = "🔴 Sangat Tinggi (Padat Kalori)"
+            kepadatan_color = "inverse"
+        elif kepadatan_energi > 1.5:
+            kepadatan_status = "🟡 Tinggi"
+            kepadatan_color = "off"
+        elif kepadatan_energi > 0.6:
+            kepadatan_status = "🟢 Rendah (Ideal)"
+            kepadatan_color = "normal"
+        else:
+            kepadatan_status = "🔵 Sangat Rendah"
+            kepadatan_color = "normal"
+
+        st.metric(label="Kepadatan Energi (kkal/gram)", value=f"{kepadatan_energi:.1f}", delta=kepadatan_status, delta_color=kepadatan_color)
+        st.caption("Menunjukkan seberapa padat kalori dalam produk ini. Kepadatan tinggi memicu obesitas jika tidak dikontrol.")
+
+    with metrik_col2:
+        rasio_gula = (gula / karbohidrat) * 100 if karbohidrat > 0 else 0
+        if rasio_gula > 50:
+            rasio_status = "🔴 Tinggi Gula Sederhana"
+            rasio_color = "inverse"
+        elif rasio_gula > 25:
+            rasio_status = "🟡 Waspada Glikemik"
+            rasio_color = "off"
+        else:
+            rasio_status = "🟢 Karbohidrat Kompleks"
+            rasio_color = "normal"
+
+        st.metric(label="Rasio Gula dari Total Karbohidrat", value=f"{rasio_gula:.1f}%", delta=rasio_status, delta_color=rasio_color)
+        st.caption("Jika >50%, sebagian besar karbohidrat adalah gula sederhana yang bisa memicu lonjakan gula darah (*sugar spike*).")
+
+    # 2. Row Tengah: Distribusi Makronutrien (Pie Chart)
+    kalori_lemak = lemak_total * 9
+    kalori_karbo = karbohidrat * 4
+    kalori_protein = protein * 4
+    total_kalori_makro = kalori_lemak + kalori_karbo + kalori_protein
+
+    if total_kalori_makro > 0:
+        df_makro = pd.DataFrame({
+            "Sumber": ["Lemak (9 kkal/g)", "Karbohidrat (4 kkal/g)", "Protein (4 kkal/g)"],
+            "Kalori": [kalori_lemak, kalori_karbo, kalori_protein],
+            "Gram": [lemak_total, karbohidrat, protein]
+        })
+
+        fig_makro = px.pie(
+            df_makro,
+            values="Kalori",
+            names="Sumber",
+            hole=0.45,
+            color="Sumber",
+            color_discrete_map={
+                "Lemak (9 kkal/g)": "#EF553B",
+                "Karbohidrat (4 kkal/g)": "#00CC96",
+                "Protein (4 kkal/g)": "#636EFA"
+            },
+            title="Distribusi Sumber Kalori (Macronutrient Split)",
+            hover_data=['Gram']
+        )
+        fig_makro.update_traces(textposition='inside', textinfo='percent+label')
+        fig_makro.update_layout(height=350, margin=dict(t=40, b=0, l=0, r=0), showlegend=False)
+        st.plotly_chart(fig_makro, use_container_width=True)
+
+    # 3. Row Bawah: Progress Bar AKG (Angka Kecukupan Gizi) per Takaran Saji
+    st.markdown("#### Pemenuhan Angka Kecukupan Gizi (AKG) Harian")
+    st.write(f"Persentase batas harian profil **{user_profile}** yang terpakai untuk **1 Takaran Saji ({takaran_saji}g/ml)** produk ini:")
+
+    # Gula
+    pct_gula = (gula / current_threshold['gula']) * 100 if current_threshold['gula'] > 0 else 0
+    st.write(f"**Gula**: {gula}g dari batas {current_threshold['gula']}g/hari")
+    st.progress(min(int(pct_gula), 100))
+    if pct_gula > 50:
+        st.warning(f"⚠️ 1 Porsi produk ini menghabiskan **{pct_gula:.1f}%** jatah gula harian Anda!")
+
+    # Natrium
+    pct_natrium = (natrium / current_threshold['natrium']) * 100 if current_threshold['natrium'] > 0 else 0
+    st.write(f"**Natrium**: {natrium}mg dari batas {current_threshold['natrium']}mg/hari")
+    st.progress(min(int(pct_natrium), 100))
+    if pct_natrium > 50:
+        st.warning(f"⚠️ 1 Porsi produk ini menghabiskan **{pct_natrium:.1f}%** jatah natrium harian Anda!")
+
+    # Lemak Jenuh
+    pct_lemak_jenuh = (lemak_jenuh / current_threshold['lemak_jenuh']) * 100 if current_threshold['lemak_jenuh'] > 0 else 0
+    st.write(f"**Lemak Jenuh**: {lemak_jenuh}g dari batas {current_threshold['lemak_jenuh']}g/hari")
+    st.progress(min(int(pct_lemak_jenuh), 100))
+    if pct_lemak_jenuh > 50:
+        st.warning(f"⚠️ 1 Porsi produk ini menghabiskan **{pct_lemak_jenuh:.1f}%** jatah lemak jenuh harian Anda!")
+
+
 # --- UI Aplikasi ---
 
 # --- Sidebar ---
@@ -262,14 +363,16 @@ with st.sidebar:
         ("Dewasa", "Anak-anak", "Lansia", "Penderita Hipertensi", "Risiko Penyakit Ginjal")
     )
     
-    thresholds = {
-        "Dewasa": {"gula": 25, "natrium": 500, "lemak_jenuh": 20},
-        "Anak-anak": {"gula": 15, "natrium": 300, "lemak_jenuh": 15},
-        "Lansia": {"gula": 20, "natrium": 400, "lemak_jenuh": 18},
-        "Penderita Hipertensi": {"gula": 20, "natrium": 250, "lemak_jenuh": 15},
-        "Risiko Penyakit Ginjal": {"gula": 18, "natrium": 200, "lemak_jenuh": 15},
+    # Batas harian sekarang mencakup kebutuhan total sebagai referensi BI metrics
+    # Nilai Gula (g), Natrium (mg), Lemak Jenuh (g) per hari
+    daily_limits = {
+        "Dewasa": {"gula": 50, "natrium": 2000, "lemak_jenuh": 22},
+        "Anak-anak": {"gula": 25, "natrium": 1500, "lemak_jenuh": 16},
+        "Lansia": {"gula": 30, "natrium": 1500, "lemak_jenuh": 20},
+        "Penderita Hipertensi": {"gula": 25, "natrium": 1200, "lemak_jenuh": 18},
+        "Risiko Penyakit Ginjal": {"gula": 25, "natrium": 1000, "lemak_jenuh": 18},
     }
-    current_threshold = thresholds[user_profile]
+    current_threshold = daily_limits[user_profile]
 
     st.markdown("---")
     
@@ -278,7 +381,7 @@ with st.sidebar:
         ["Analisis Produk Tunggal", "Scan from Image", "Analisis Batch (Excel)", "Perbandingan Produk", "Simulasi Konsumsi", "Riwayat Analisis", "Edukasi Gizi"]
     )
     st.markdown("---")
-    st.info("Dashboard ini adalah prototipe interaktif. Fitur Analisis AI kini terintegrasi penuh dengan model hybrid CBLIGHT-WOA.")
+    st.info("Dashboard ini adalah sistem intelijen terpadu. Fitur Analisis AI di-back-up oleh model hybrid CBLIGHT-WOA & BI Analytics.")
 
 # --- Halaman Utama ---
 
@@ -291,432 +394,75 @@ if app_mode == "Analisis Produk Tunggal":
         st.success("Model AI aktif dan siap digunakan untuk analisis.")
         st.markdown("---")
 
-        main_col, right_col = st.columns([2, 1])
+        main_col, right_col = st.columns([1.8, 1.2])
 
         with main_col:
             st.subheader("Input Informasi Produk")
             st.markdown("Isi form di bawah ini dengan informasi dari label nutrisi produk.")
             
-            # Form untuk input data
             product_name = st.text_input("Nama Produk", "Biskuit Cokelat")
-            c1, c2, c3 = st.columns(3)
+
+            # Form untuk input data (Ditambah Takaran Saji untuk BI)
+            c0, c1, c2 = st.columns(3)
+            takaran_saji = c0.number_input("Takaran Saji (g/ml)", min_value=1.0, value=30.0, format="%.1f")
             energi = c1.number_input("Energi (kkal)", min_value=0, value=180)
             lemak_total = c2.number_input("Lemak Total (g)", min_value=0.0, value=8.0, format="%.1f")
-            lemak_jenuh = c3.number_input("Lemak Jenuh (g)", min_value=0.0, value=4.0, format="%.1f")
 
-            c4, c5, c6 = st.columns(3)
+            c3, c4, c5 = st.columns(3)
+            lemak_jenuh = c3.number_input("Lemak Jenuh (g)", min_value=0.0, value=4.0, format="%.1f")
             protein = c4.number_input("Protein (g)", min_value=0.0, value=2.0, format="%.1f")
             karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=25.0, format="%.1f")
-            gula = c6.number_input("Gula (g)", min_value=0.0, value=15.0, format="%.1f")
 
-            c7, c8, c9 = st.columns(3)
+            c6, c7, c8, c9 = st.columns(4)
+            gula = c6.number_input("Gula (g)", min_value=0.0, value=15.0, format="%.1f")
             garam = c7.number_input("Garam (g)", min_value=0.0, value=0.3, format="%.2f")
             natrium = c8.number_input("Natrium (mg)", min_value=0, value=200)
             natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=0.0, format="%.2f")
 
             komposisi = st.text_area("Komposisi / Ingredients", "Tepung Terigu, Gula, Minyak Nabati, Cokelat Bubuk, Pengembang, Perisa Sintetik, Garam.")
 
-            analyze_button = st.button("✨ Analisis Sekarang!", type="primary")
+            analyze_button = st.button("✨ Analisis AI & Gizi Sekarang!", type="primary")
 
         with right_col:
-            st.subheader("Hasil Analisis AI")
-            risk_display = st.empty()
-            st.metric(label="Skor Risiko Prediksi", value="-")
-            st.write("")
-            st.markdown("---")
-            st.subheader("Faktor Risiko Utama (XAI)")
-            st.info("Grafik kontribusi fitur akan muncul di sini setelah analisis.")
-            st.markdown("---")
-            st.subheader("Rekomendasi Konsumsi")
-            st.info("Rekomendasi akan muncul di sini setelah analisis.")
+            st.subheader("Hasil Analisis AI (Prediksi Risiko)")
+            if analyze_button:
+                with st.spinner('Menganalisis produk dengan model CBLIGHT-WOA...'):
+                    # Data dictionary ini TETAP murni untuk model ML, tanpa diganggu metrik BI
+                    nutrition_data = {
+                        'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
+                        'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
+                        'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
+                    }
 
-        if analyze_button:
-            with st.spinner('Menganalisis produk dengan model CBLIGHT-WOA...'):
-                nutrition_data = {
-                    'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
-                    'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
-                    'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
-                }
-                
-                # Call the new, correct analysis function
-                risk_score, xai_factors, recommendation = analyze_product_fully(
-                    nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
-                )
-
-                # Update session state for history
-                from datetime import datetime
-                st.session_state.scan_history.append({
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "product_name": product_name,
-                    "risk_score": risk_score,
-                    "profile": user_profile,
-                    "nutrition": nutrition_data
-                })
-
-                with right_col:
-                    st.metric(label="Skor Risiko Prediksi", value=f"{risk_score:.2f}%")
-                    if risk_score > 75:
-                        st.error("🔴 Risiko Sangat Tinggi")
-                    elif risk_score > 50:
-                        st.warning("🟠 Risiko Tinggi")
-                    elif risk_score > 25:
-                        st.warning("🟡 Risiko Sedang")
-                    else:
-                        st.success("🟢 Risiko Rendah")
-
-                    st.markdown("---")
-                    st.markdown("#### Profil Risiko & Kontribusi Nutrisi")
-
-                    # Membuat Radar Chart (Spider Web) interaktif menggunakan Plotly Graph Objects
-                    categories = list(xai_factors.keys())
-                    values = list(xai_factors.values())
-
-                    # Normalisasi sederhana untuk tujuan visualisasi radar agar skalanya mirip (0-100)
-                    # Ini murni untuk UX agar bentuk jaringnya seimbang meskipun satuannya beda (g vs mg vs kkal)
-                    norm_values = []
-                    for k, v in xai_factors.items():
-                        if 'gula' in k.lower(): norm_values.append(min((v / 50) * 100, 100)) # batas max visual 50g
-                        elif 'natrium' in k.lower() and 'benzoat' not in k.lower(): norm_values.append(min((v / 1500) * 100, 100)) # batas max visual 1500mg
-                        elif 'lemak' in k.lower(): norm_values.append(min((v / 67) * 100, 100)) # batas max visual 67g
-                        elif 'energi' in k.lower(): norm_values.append(min((v / 2000) * 100, 100)) # batas max visual 2000kkal
-                        else: norm_values.append(min((v / 100) * 100, 100)) # fallback
-
-                    fig_radar = go.Figure()
-
-                    fig_radar.add_trace(go.Scatterpolar(
-                        r=norm_values + [norm_values[0]], # Tutup kurva radar
-                        theta=categories + [categories[0]],
-                        fill='toself',
-                        name='Kandungan Produk',
-                        line_color='red' if risk_score > 50 else 'orange' if risk_score > 25 else 'green',
-                        hovertemplate="Feature: %{theta}<br>Skor Relatif: %{r:.1f}/100<extra></extra>"
-                    ))
-
-                    fig_radar.update_layout(
-                        polar=dict(
-                            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
-                        ),
-                        showlegend=False,
-                        title="Peta Radar Risiko Fitur (Relatif thd Batas Harian)",
-                        margin=dict(l=20, r=20, t=40, b=20),
-                        height=350
+                    risk_score, xai_factors, recommendation = analyze_product_fully(
+                        nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
                     )
 
-                    st.plotly_chart(fig_radar, use_container_width=True)
-
-                    # Tampilkan nilai riil dalam bentuk indikator bar yang lebih informatif
-                    st.markdown("##### Nilai Kandungan Nutrisi:")
-                    df_xai = pd.DataFrame({
-                        "Nutrisi": categories,
-                        "Kandungan": values
+                    from datetime import datetime
+                    st.session_state.scan_history.append({
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "product_name": product_name,
+                        "risk_score": risk_score,
+                        "profile": user_profile,
+                        "nutrition": nutrition_data
                     })
 
-                    fig_bar = px.bar(
-                        df_xai,
-                        y="Nutrisi",
-                        x="Kandungan",
-                        orientation='h',
-                        color="Kandungan",
-                        color_continuous_scale="Reds" if risk_score > 50 else "Oranges" if risk_score > 25 else "Greens",
-                        text_auto='.1f'
-                    )
-                    fig_bar.update_layout(height=250, margin=dict(l=20, r=20, t=10, b=20), coloraxis_showscale=False)
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-                    st.markdown("---")
-                    st.markdown("#### Rekomendasi Konsumsi")
-                    st.info(recommendation)
-                    
-                    st.markdown("---")
-                    st.markdown(f"**Peringatan Cerdas (Profil: {user_profile})**")
-                    warnings = []
-                    if gula > current_threshold['gula']:
-                        warnings.append(f"Gula ({gula}g) melebihi batas aman profil ({current_threshold['gula']}g).")
-                    if natrium > current_threshold['natrium']:
-                        warnings.append(f"Natrium ({natrium}mg) melebihi batas aman profil ({current_threshold['natrium']}mg).")
-                    if lemak_jenuh > current_threshold['lemak_jenuh']:
-                        warnings.append(f"Lemak Jenuh ({lemak_jenuh}g) melebihi batas aman profil ({current_threshold['lemak_jenuh']}g).")
-
-                    if warnings:
-                        for warning in warnings:
-                            st.warning(f"⚠️ {warning}")
-                    else:
-                        st.success("Kandungan nutrisi dalam batas aman untuk profil Anda.")
-
-
-elif app_mode == "Scan from Image":
-
-
-    st.header("1. Scan Produk Otomatis melalui Foto")
-
-
-    st.info("Unggah gambar kemasan produk. Sistem akan mencoba membaca informasi nilai gizi secara otomatis.")
-
-
-
-
-
-    uploaded_image = st.file_uploader("Pilih gambar produk...", type=["jpg", "jpeg", "png"])
-
-
-
-
-
-    if uploaded_image is not None:
-
-
-        image = Image.open(uploaded_image)
-
-
-        st.image(image, caption='Gambar yang Diunggah', use_column_width=True)
-
-
-        
-
-
-        with st.spinner("Membaca dan menganalisis teks dari gambar..."):
-
-
-            img_byte_arr = io.BytesIO()
-
-
-            image.save(img_byte_arr, format='PNG')
-
-
-            img_byte_arr = img_byte_arr.getvalue()
-
-
-
-
-
-            ocr_results = reader.readtext(img_byte_arr, detail=0, paragraph=True)
-
-
-            detected_text = " ".join(ocr_results)
-
-
-            
-
-
-            # Parse teks yang terdeteksi
-
-
-            parsed_data = parse_nutrition_text(detected_text)
-
-
-
-
-
-        st.success("✨ Teks berhasil dibaca! Silakan periksa dan koreksi data di bawah ini jika perlu.")
-
-
-        st.markdown("---")
-
-
-
-
-
-        # Tampilkan form yang sudah diisi otomatis
-
-
-        main_col, right_col = st.columns([2, 1])
-
-
-
-
-
-        with main_col:
-
-
-            st.subheader("Input Informasi Produk (Hasil OCR)")
-
-
-            
-
-
-            # Form untuk input data
-
-
-            product_name = st.text_input("Nama Produk", value=parsed_data.get('product_name', ''))
-
-
-            c1, c2, c3 = st.columns(3)
-
-
-            energi = c1.number_input("Energi (kkal)", min_value=0, value=int(parsed_data.get('energi', 0)))
-
-
-            lemak_total = c2.number_input("Lemak Total (g)", min_value=0.0, value=parsed_data.get('lemak_total', 0.0), format="%.1f")
-
-
-            lemak_jenuh = c3.number_input("Lemak Jenuh (g)", min_value=0.0, value=parsed_data.get('lemak_jenuh', 0.0), format="%.1f")
-
-
-
-
-
-            c4, c5, c6 = st.columns(3)
-
-
-            protein = c4.number_input("Protein (g)", min_value=0.0, value=parsed_data.get('protein', 0.0), format="%.1f")
-
-
-            karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=parsed_data.get('karbohidrat', 0.0), format="%.1f")
-
-
-            gula = c6.number_input("Gula (g)", min_value=0.0, value=parsed_data.get('gula', 0.0), format="%.1f")
-
-
-
-
-
-            c7, c8, c9 = st.columns(3)
-
-
-            garam = c7.number_input("Garam (g)", min_value=0.0, value=parsed_data.get('garam', 0.0), format="%.2f")
-
-
-            natrium = c8.number_input("Natrium (mg)", min_value=0, value=int(parsed_data.get('natrium', 0)))
-
-
-            natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=parsed_data.get('natrium_benzoat', 0.0), format="%.2f")
-
-
-
-
-
-            komposisi = st.text_area("Komposisi / Ingredients", value=parsed_data.get('komposisi', ''), height=150)
-
-
-
-
-
-            analyze_button = st.button("✨ Analisis Sekarang!", type="primary")
-
-
-
-
-
-        with right_col:
-
-
-            st.subheader("Hasil Analisis AI")
-
-
-            st.metric(label="Skor Risiko Prediksi", value="-")
-
-
-            st.write("")
-
-
-            st.markdown("---")
-
-
-            st.subheader("Faktor Risiko Utama (XAI)")
-
-
-            st.info("Grafik kontribusi fitur akan muncul di sini setelah analisis.")
-
-
-            st.markdown("---")
-
-
-            st.subheader("Rekomendasi Konsumsi")
-
-
-            st.info("Rekomendasi akan muncul di sini setelah analisis.")
-
-
-
-
-
-        if analyze_button:
-
-
-            with st.spinner('Menganalisis produk dengan model CBLIGHT-WOA...'):
-
-
-                nutrition_data = {
-
-
-                    'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
-
-
-                    'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
-
-
-                    'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
-
-
-                }
-
-
-                
-
-
-                risk_score, xai_factors, recommendation = analyze_product_fully(
-
-
-                    nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
-
-
-                )
-
-
-
-                # Update session state for history
-                from datetime import datetime
-                st.session_state.scan_history.append({
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "product_name": product_name,
-                    "risk_score": risk_score,
-                    "profile": user_profile,
-                    "nutrition": nutrition_data
-                })
-
-                with right_col:
-
-
-                    st.metric(label="Skor Risiko Prediksi", value=f"{risk_score:.2f}%")
-
-
+                    st.metric(label="Skor Risiko Prediksi ML", value=f"{risk_score:.2f}%")
                     if risk_score > 75:
-
-
                         st.error("🔴 Risiko Sangat Tinggi")
-
-
                     elif risk_score > 50:
-
-
                         st.warning("🟠 Risiko Tinggi")
-
-
                     elif risk_score > 25:
-
-
                         st.warning("🟡 Risiko Sedang")
-
-
                     else:
-
-
                         st.success("🟢 Risiko Rendah")
 
-
-
-
-
                     st.markdown("---")
+                    st.markdown("#### Radar Kontribusi Nutrisi (XAI)")
 
-
-                    st.markdown("#### Profil Risiko & Kontribusi Nutrisi")
-
-                    # Membuat Radar Chart (Spider Web) interaktif menggunakan Plotly Graph Objects
                     categories = list(xai_factors.keys())
                     values = list(xai_factors.values())
 
-                    # Normalisasi sederhana untuk tujuan visualisasi radar agar skalanya mirip (0-100)
                     norm_values = []
                     for k, v in xai_factors.items():
                         if 'gula' in k.lower(): norm_values.append(min((v / 50) * 100, 100))
@@ -737,90 +483,148 @@ elif app_mode == "Scan from Image":
                     ))
 
                     fig_radar.update_layout(
-                        polar=dict(
-                            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
-                        ),
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 100], showticklabels=False)),
                         showlegend=False,
-                        title="Peta Radar Risiko Fitur (Relatif thd Batas Harian)",
-                        margin=dict(l=20, r=20, t=40, b=20),
-                        height=350
+                        margin=dict(l=20, r=20, t=20, b=20),
+                        height=250
                     )
-
                     st.plotly_chart(fig_radar, use_container_width=True)
 
-                    st.markdown("##### Nilai Kandungan Nutrisi:")
-                    df_xai = pd.DataFrame({
-                        "Nutrisi": categories,
-                        "Kandungan": values
-                    })
-
-                    fig_bar = px.bar(
-                        df_xai,
-                        y="Nutrisi",
-                        x="Kandungan",
-                        orientation='h',
-                        color="Kandungan",
-                        color_continuous_scale="Reds" if risk_score > 50 else "Oranges" if risk_score > 25 else "Greens",
-                        text_auto='.1f'
-                    )
-                    fig_bar.update_layout(height=250, margin=dict(l=20, r=20, t=10, b=20), coloraxis_showscale=False)
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-                    st.markdown("---")
-
-
-                    st.markdown("#### Rekomendasi Konsumsi")
-
-
+                    st.markdown("#### Rekomendasi ML")
                     st.info(recommendation)
 
+            else:
+                st.metric(label="Skor Risiko Prediksi", value="-")
+                st.info("Input data dan jalankan analisis untuk melihat detail prediksi risiko, Radar XAI, dan Rekomendasi ML.")
 
-                    
+        # Eksekusi visualisasi Business & Health Metrics di bawah setelah tombol di-klik
+        if analyze_button:
+            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, user_profile)
 
+
+elif app_mode == "Scan from Image":
+    st.header("1. Scan Produk Otomatis melalui Foto")
+    st.info("Unggah gambar kemasan produk. Sistem OCR akan membaca informasi gizi, dilanjutkan dengan analitik AI & BI.")
+
+    uploaded_image = st.file_uploader("Pilih gambar produk...", type=["jpg", "jpeg", "png"])
+
+    if uploaded_image is not None:
+        image = Image.open(uploaded_image)
+        
+        col_img, col_proc = st.columns([1, 2])
+        with col_img:
+            st.image(image, caption='Gambar yang Diunggah', use_container_width=True)
+
+        with col_proc:
+            with st.spinner("Membaca dan menganalisis teks dari gambar..."):
+                img_byte_arr = io.BytesIO()
+                image.save(img_byte_arr, format='PNG')
+                img_byte_arr = img_byte_arr.getvalue()
+
+                ocr_results = reader.readtext(img_byte_arr, detail=0, paragraph=True)
+                detected_text = " ".join(ocr_results)
+                parsed_data = parse_nutrition_text(detected_text)
+
+            st.success("✨ Teks berhasil dibaca! Silakan lengkapi 'Takaran Saji' dan koreksi data jika perlu.")
+
+        st.markdown("---")
+
+        main_col, right_col = st.columns([1.8, 1.2])
+
+        with main_col:
+            st.subheader("Input Informasi Produk (Hasil OCR)")
+            
+            product_name = st.text_input("Nama Produk", value=parsed_data.get('product_name', ''))
+
+            # Tambahan input takaran saji karena OCR sering miss bagian ini jika formatnya aneh
+            c0, c1, c2 = st.columns(3)
+            takaran_saji = c0.number_input("Takaran Saji (g/ml)", min_value=1.0, value=30.0, format="%.1f", help="OCR sulit menangkap ini. Mohon isi manual.")
+            energi = c1.number_input("Energi (kkal)", min_value=0, value=int(parsed_data.get('energi', 0)))
+            lemak_total = c2.number_input("Lemak Total (g)", min_value=0.0, value=parsed_data.get('lemak_total', 0.0), format="%.1f")
+
+            c3, c4, c5 = st.columns(3)
+            lemak_jenuh = c3.number_input("Lemak Jenuh (g)", min_value=0.0, value=parsed_data.get('lemak_jenuh', 0.0), format="%.1f")
+            protein = c4.number_input("Protein (g)", min_value=0.0, value=parsed_data.get('protein', 0.0), format="%.1f")
+            karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=parsed_data.get('karbohidrat', 0.0), format="%.1f")
+
+            c6, c7, c8, c9 = st.columns(4)
+            gula = c6.number_input("Gula (g)", min_value=0.0, value=parsed_data.get('gula', 0.0), format="%.1f")
+            garam = c7.number_input("Garam (g)", min_value=0.0, value=parsed_data.get('garam', 0.0), format="%.2f")
+            natrium = c8.number_input("Natrium (mg)", min_value=0, value=int(parsed_data.get('natrium', 0)))
+            natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=parsed_data.get('natrium_benzoat', 0.0), format="%.2f")
+
+            komposisi = st.text_area("Komposisi / Ingredients", value=parsed_data.get('komposisi', ''), height=100)
+
+            analyze_button = st.button("✨ Analisis AI & Gizi Sekarang!", type="primary")
+
+        with right_col:
+            st.subheader("Hasil Analisis AI (Prediksi Risiko)")
+            if analyze_button:
+                with st.spinner('Menganalisis produk dengan model CBLIGHT-WOA...'):
+                    nutrition_data = {
+                        'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
+                        'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
+                        'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
+                    }
+
+                    risk_score, xai_factors, recommendation = analyze_product_fully(
+                        nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
+                    )
+
+                    from datetime import datetime
+                    st.session_state.scan_history.append({
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "product_name": product_name,
+                        "risk_score": risk_score,
+                        "profile": user_profile,
+                        "nutrition": nutrition_data
+                    })
+
+                    st.metric(label="Skor Risiko Prediksi", value=f"{risk_score:.2f}%")
+                    if risk_score > 75: st.error("🔴 Risiko Sangat Tinggi")
+                    elif risk_score > 50: st.warning("🟠 Risiko Tinggi")
+                    elif risk_score > 25: st.warning("🟡 Risiko Sedang")
+                    else: st.success("🟢 Risiko Rendah")
 
                     st.markdown("---")
+                    st.markdown("#### Radar Kontribusi Nutrisi (XAI)")
 
+                    categories = list(xai_factors.keys())
+                    values = list(xai_factors.values())
 
-                    st.markdown(f"**Peringatan Cerdas (Profil: {user_profile})**")
+                    norm_values = []
+                    for k, v in xai_factors.items():
+                        if 'gula' in k.lower(): norm_values.append(min((v / 50) * 100, 100))
+                        elif 'natrium' in k.lower() and 'benzoat' not in k.lower(): norm_values.append(min((v / 1500) * 100, 100))
+                        elif 'lemak' in k.lower(): norm_values.append(min((v / 67) * 100, 100))
+                        elif 'energi' in k.lower(): norm_values.append(min((v / 2000) * 100, 100))
+                        else: norm_values.append(min((v / 100) * 100, 100))
 
+                    fig_radar = go.Figure()
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=norm_values + [norm_values[0]],
+                        theta=categories + [categories[0]],
+                        fill='toself',
+                        name='Kandungan Produk',
+                        line_color='red' if risk_score > 50 else 'orange' if risk_score > 25 else 'green',
+                        hovertemplate="Feature: %{theta}<br>Skor Relatif: %{r:.1f}/100<extra></extra>"
+                    ))
 
-                    warnings = []
+                    fig_radar.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 100], showticklabels=False)),
+                        showlegend=False, margin=dict(l=20, r=20, t=20, b=20), height=250
+                    )
+                    st.plotly_chart(fig_radar, use_container_width=True)
 
+                    st.markdown("#### Rekomendasi ML")
+                    st.info(recommendation)
+            else:
+                 st.metric(label="Skor Risiko Prediksi", value="-")
+                 st.info("Jalankan analisis untuk melihat hasil AI.")
 
-                    if gula > current_threshold['gula']:
-
-
-                        warnings.append(f"Gula ({gula}g) melebihi batas aman profil ({current_threshold['gula']}g).")
-
-
-                    if natrium > current_threshold['natrium']:
-
-
-                        warnings.append(f"Natrium ({natrium}mg) melebihi batas aman profil ({current_threshold['natrium']}mg).")
-
-
-                    if lemak_jenuh > current_threshold['lemak_jenuh']:
-
-
-                        warnings.append(f"Lemak Jenuh ({lemak_jenuh}g) melebihi batas aman profil ({current_threshold['lemak_jenuh']}g).")
-
-
-
-
-
-                    if warnings:
-
-
-                        for warning in warnings:
-
-
-                            st.warning(f"⚠️ {warning}")
-
-
-                    else:
-
-
-                        st.success("Kandungan nutrisi dalam batas aman untuk profil Anda.")
+        # Panggil render module BI
+        if analyze_button:
+            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, user_profile)
 
 
 
@@ -897,13 +701,14 @@ elif app_mode == "Analisis Batch (Excel)":
 
 elif app_mode == "Perbandingan Produk":
     st.header("7. Perbandingan Produk (Food Comparison Mode)")
-    st.info("Masukkan informasi nutrisi dari dua produk untuk membandingkan skor risiko dan keamanannya.")
+    st.info("Bandingkan metrik AI (Skor Risiko) dan metrik BI (Kepadatan Energi) dari dua produk sekaligus.")
     
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("Produk A")
         p_a_name = st.text_input("Nama Produk A", "Sereal Pagi A")
+        p_a_takaran = st.number_input("Takaran Saji A (g)", min_value=1.0, value=30.0, format="%.1f")
         p_a_energi = st.number_input("Energi A (kkal)", min_value=0, value=150)
         p_a_lemak_total = st.number_input("Lemak Total A (g)", min_value=0.0, value=5.0, format="%.1f")
         p_a_lemak_jenuh = st.number_input("Lemak Jenuh A (g)", min_value=0.0, value=1.0, format="%.1f")
@@ -913,12 +718,12 @@ elif app_mode == "Perbandingan Produk":
         p_a_natrium = st.number_input("Natrium A (mg)", min_value=0, value=180)
         p_a_natrium_benzoat = st.number_input("Natrium Benzoat A (mg)", min_value=0.0, value=0.0, format="%.2f")
         p_a_komposisi = st.text_area("Komposisi A", "Gandum Utuh, Gula, Garam.", height=100)
-        # Dummy input for garam to maintain data structure, though natrium is primary
         p_a_garam = p_a_natrium / 400 
 
     with col2:
         st.subheader("Produk B")
         p_b_name = st.text_input("Nama Produk B", "Sereal Pagi B")
+        p_b_takaran = st.number_input("Takaran Saji B (g)", min_value=1.0, value=30.0, format="%.1f")
         p_b_energi = st.number_input("Energi B (kkal)", min_value=0, value=160)
         p_b_lemak_total = st.number_input("Lemak Total B (g)", min_value=0.0, value=6.0, format="%.1f")
         p_b_lemak_jenuh = st.number_input("Lemak Jenuh B (g)", min_value=0.0, value=3.0, format="%.1f")
@@ -928,7 +733,6 @@ elif app_mode == "Perbandingan Produk":
         p_b_natrium = st.number_input("Natrium B (mg)", min_value=0, value=250)
         p_b_natrium_benzoat = st.number_input("Natrium Benzoat B (mg)", min_value=0.0, value=0.0, format="%.2f")
         p_b_komposisi = st.text_area("Komposisi B", "Jagung, Gula, Sirup Fruktosa, Garam.", height=100)
-        # Dummy input for garam
         p_b_garam = p_b_natrium / 400
 
     st.markdown("---")
@@ -936,81 +740,67 @@ elif app_mode == "Perbandingan Produk":
 
     if compare_button:
         with st.spinner("Menganalisis dan membandingkan kedua produk..."):
-            # Data untuk Produk A
             nutrition_a = {
                 'energi': p_a_energi, 'lemak_total': p_a_lemak_total, 'lemak_jenuh': p_a_lemak_jenuh,
                 'protein': p_a_protein, 'karbohidrat': p_a_karbohidrat, 'gula': p_a_gula,
                 'garam': p_a_garam, 'natrium': p_a_natrium, 'natrium_benzoat': p_a_natrium_benzoat
             }
-            # Data untuk Produk B
             nutrition_b = {
                 'energi': p_b_energi, 'lemak_total': p_b_lemak_total, 'lemak_jenuh': p_b_lemak_jenuh,
                 'protein': p_b_protein, 'karbohidrat': p_b_karbohidrat, 'gula': p_b_gula,
                 'garam': p_b_garam, 'natrium': p_b_natrium, 'natrium_benzoat': p_b_natrium_benzoat
             }
 
-            # Analisis kedua produk
             risk_a, _, _ = analyze_product_fully(nutrition_a, p_a_komposisi, feat_model, lgbm_model, w2v_model, scaler)
             risk_b, _, _ = analyze_product_fully(nutrition_b, p_b_komposisi, feat_model, lgbm_model, w2v_model, scaler)
 
-            st.subheader("Hasil Perbandingan")
+            st.subheader("Pemenang Analisis Keseluruhan")
             
+            # Kalkulasi Kepadatan Energi untuk BI Metric
+            kepadatan_a = p_a_energi / p_a_takaran
+            kepadatan_b = p_b_energi / p_b_takaran
+
             res_col1, res_col2 = st.columns(2)
             
             with res_col1:
-                st.metric(label=f"Skor Risiko {p_a_name}", value=f"{risk_a:.2f}%")
-                if risk_a > 75: st.error("Risiko Sangat Tinggi")
-                elif risk_a > 50: st.warning("Risiko Tinggi")
-                elif risk_a > 25: st.warning("Risiko Sedang")
-                else: st.success("Risiko Rendah")
+                st.markdown(f"### {p_a_name}")
+                st.metric(label="Skor Risiko AI", value=f"{risk_a:.2f}%")
+                st.metric(label="Kepadatan Energi", value=f"{kepadatan_a:.2f} kkal/g")
 
             with res_col2:
-                st.metric(label=f"Skor Risiko {p_b_name}", value=f"{risk_b:.2f}%")
-                if risk_b > 75: st.error("Risiko Sangat Tinggi")
-                elif risk_b > 50: st.warning("Risiko Tinggi")
-                elif risk_b > 25: st.warning("Risiko Sedang")
-                else: st.success("Risiko Rendah")
+                st.markdown(f"### {p_b_name}")
+                st.metric(label="Skor Risiko AI", value=f"{risk_b:.2f}%")
+                st.metric(label="Kepadatan Energi", value=f"{kepadatan_b:.2f} kkal/g")
 
             st.markdown("---")
-            st.subheader("Rekomendasi")
 
             if risk_a < risk_b:
-                st.success(f"🏆 **{p_a_name}** adalah pilihan yang lebih baik dengan skor risiko lebih rendah.")
-                st.write(f"Skor risiko {p_a_name} ({risk_a:.2f}%) lebih rendah daripada {p_b_name} ({risk_b:.2f}%).")
+                st.success(f"🏆 **{p_a_name}** adalah pilihan yang lebih baik secara algoritma AI dengan skor risiko lebih rendah.")
             elif risk_b < risk_a:
-                st.success(f"🏆 **{p_b_name}** adalah pilihan yang lebih baik dengan skor risiko lebih rendah.")
-                st.write(f"Skor risiko {p_b_name} ({risk_b:.2f}%) lebih rendah daripada {p_a_name} ({risk_a:.2f}%).")
+                st.success(f"🏆 **{p_b_name}** adalah pilihan yang lebih baik secara algoritma AI dengan skor risiko lebih rendah.")
             else:
                 st.info("Kedua produk memiliki skor risiko yang sama.")
 
-            # Menampilkan perbandingan nutrisi kunci
-            st.subheader("Visualisasi Perbandingan Nutrisi")
+            st.subheader("Visualisasi Perbandingan Nutrisi (Normalisasi per 100g)")
+            # Mengubah ke format per 100g agar perbandingannya apple-to-apple dalam grafik
+            faktor_a = 100 / p_a_takaran
+            faktor_b = 100 / p_b_takaran
 
-            # Grouped Bar Chart untuk membandingkan secara langsung
             df_compare = pd.DataFrame({
-                "Nutrisi": ["Gula (g)", "Natrium (mg)", "Lemak Jenuh (g)", "Energi (kkal)", "Lemak Total (g)"],
-                p_a_name: [p_a_gula, p_a_natrium, p_a_lemak_jenuh, p_a_energi, p_a_lemak_total],
-                p_b_name: [p_b_gula, p_b_natrium, p_b_lemak_jenuh, p_b_energi, p_b_lemak_total]
+                "Nutrisi (per 100g)": ["Gula (g)", "Natrium (mg)", "Lemak Jenuh (g)", "Karbohidrat (g)", "Protein (g)"],
+                p_a_name: [p_a_gula * faktor_a, p_a_natrium * faktor_a, p_a_lemak_jenuh * faktor_a, p_a_karbohidrat * faktor_a, p_a_protein * faktor_a],
+                p_b_name: [p_b_gula * faktor_b, p_b_natrium * faktor_b, p_b_lemak_jenuh * faktor_b, p_b_karbohidrat * faktor_b, p_b_protein * faktor_b]
             })
 
-            # Melt DataFrame untuk format yang diterima Plotly Express
-            df_melted = df_compare.melt(id_vars=["Nutrisi"], var_name="Produk", value_name="Kandungan")
+            df_melted = df_compare.melt(id_vars=["Nutrisi (per 100g)"], var_name="Produk", value_name="Kandungan")
 
             fig_compare_bar = px.bar(
-                df_melted,
-                x="Nutrisi",
-                y="Kandungan",
-                color="Produk",
-                barmode="group",
-                title=f"Perbandingan Nutrisi: {p_a_name} vs {p_b_name}",
+                df_melted, x="Nutrisi (per 100g)", y="Kandungan", color="Produk", barmode="group",
+                title=f"Perbandingan Nutrisi: {p_a_name} vs {p_b_name} (Distandarisasi per 100g)",
                 text_auto='.1f'
             )
             fig_compare_bar.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
             st.plotly_chart(fig_compare_bar, use_container_width=True)
-
-            st.markdown("---")
-            st.subheader("Tabel Detail Perbandingan")
-            st.dataframe(df_compare.set_index("Nutrisi"))
 
 
 elif app_mode == "Riwayat Analisis":
@@ -1146,29 +936,32 @@ elif app_mode == "Simulasi Konsumsi":
     st.info("Masukkan detail produk dan perkirakan dampak risikonya berdasarkan frekuensi konsumsi Anda.")
 
     st.subheader("Langkah 1: Definisikan Produk")
-    # Menggunakan kembali form input dari analisis tunggal
     product_name = st.text_input("Nama Produk", "Minuman Soda")
-    c1, c2, c3 = st.columns(3)
+
+    # Tambah input Takaran Saji untuk konsistensi meskipun tidak dipakai kalkulasi total serving di ML
+    c0, c1, c2 = st.columns(3)
+    takaran_saji = c0.number_input("Takaran Saji (g/ml)", min_value=1.0, value=250.0, format="%.1f")
     energi = c1.number_input("Energi (kkal)", min_value=0, value=150)
     lemak_total = c2.number_input("Lemak Total (g)", min_value=0.0, value=0.0, format="%.1f")
+
+    c3, c4, c5 = st.columns(3)
     lemak_jenuh = c3.number_input("Lemak Jenuh (g)", min_value=0.0, value=0.0, format="%.1f")
-    c4, c5, c6 = st.columns(3)
     protein = c4.number_input("Protein (g)", min_value=0.0, value=0.0, format="%.1f")
     karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=40.0, format="%.1f")
+
+    c6, c7, c8, c9 = st.columns(4)
     gula = c6.number_input("Gula (g)", min_value=0.0, value=39.0, format="%.1f")
-    c7, c8, c9 = st.columns(3)
     garam = c7.number_input("Garam (g)", min_value=0.0, value=0.1, format="%.2f")
     natrium = c8.number_input("Natrium (mg)", min_value=0, value=45)
     natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=0.0, format="%.2f")
+
     komposisi = st.text_area("Komposisi / Ingredients", "Air Berkarbonasi, Gula, Sirup Fruktosa, Perisa Sintetik, Pengatur Keasaman.")
 
     st.markdown("---")
     st.subheader("Langkah 2: Atur Pola Konsumsi")
     freq_col, period_col = st.columns(2)
-    
     with freq_col:
-        frequency_per_week = st.number_input("Frekuensi konsumsi per minggu (kali)", min_value=1, value=3)
-    
+        frequency_per_week = st.number_input("Frekuensi konsumsi per minggu (kali/sajian)", min_value=1, value=3)
     with period_col:
         simulation_period_months = st.selectbox("Periode Simulasi (Bulan)", [1, 3, 6, 12])
 
@@ -1177,7 +970,6 @@ elif app_mode == "Simulasi Konsumsi":
 
     if simulation_button:
         with st.spinner("Menjalankan simulasi konsumsi..."):
-            # Langkah 1: Analisis produk tunggal untuk mendapatkan skor dasar
             nutrition_data = {
                 'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
                 'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
@@ -1187,30 +979,21 @@ elif app_mode == "Simulasi Konsumsi":
                 nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
             )
 
-            st.subheader(f"Hasil Analisis Awal untuk '{product_name}'")
+            st.subheader(f"Hasil Analisis Dasar untuk '{product_name}'")
             res_col, _ = st.columns(2)
             with res_col:
-                st.metric(label="Skor Risiko per Konsumsi", value=f"{risk_score:.2f}%")
+                st.metric(label="Skor Risiko per 1x Konsumsi", value=f"{risk_score:.2f}%")
                 if risk_score > 75: st.error("Risiko Sangat Tinggi")
                 elif risk_score > 50: st.warning("Risiko Tinggi")
                 elif risk_score > 25: st.warning("Risiko Sedang")
                 else: st.success("Risiko Rendah")
 
             st.markdown("---")
-            st.subheader(f"Hasil Simulasi Konsumsi Selama {simulation_period_months} Bulan")
+            st.subheader(f"Simulasi Akumulasi Selama {simulation_period_months} Bulan")
 
-            # Mendefinisikan batas harian berdasarkan profil pengguna
-            daily_limits = {
-                "Dewasa": {"gula": 50, "natrium": 2000, "lemak_jenuh": 22},  # g, mg, g
-                "Anak-anak": {"gula": 25, "natrium": 1500, "lemak_jenuh": 16},
-                "Lansia": {"gula": 30, "natrium": 1500, "lemak_jenuh": 20},
-                "Penderita Hipertensi": {"gula": 25, "natrium": 1200, "lemak_jenuh": 18},
-                "Risiko Penyakit Ginjal": {"gula": 25, "natrium": 1000, "lemak_jenuh": 18},
-            }
-            profile_daily_limits = daily_limits[user_profile]
+            profile_daily_limits = current_threshold
 
-            # Kalkulasi total
-            days_in_period = simulation_period_months * 30.44  # Rata-rata hari per bulan
+            days_in_period = simulation_period_months * 30.44
             weeks_in_period = days_in_period / 7
             total_servings = frequency_per_week * weeks_in_period
 
@@ -1218,15 +1001,12 @@ elif app_mode == "Simulasi Konsumsi":
             total_natrium = natrium * total_servings
             total_lemak_jenuh = lemak_jenuh * total_servings
 
-            # Kalkulasi batas untuk periode simulasi
             limit_gula = profile_daily_limits['gula'] * days_in_period
             limit_natrium = profile_daily_limits['natrium'] * days_in_period
             limit_lemak_jenuh = profile_daily_limits['lemak_jenuh'] * days_in_period
 
-            st.write(f"Dengan mengonsumsi **{product_name}** sebanyak **{frequency_per_week}** kali seminggu, estimasi total asupan Anda dari produk ini adalah:")
+            st.write(f"Dengan mengonsumsi **{product_name}** sebanyak **{frequency_per_week}** sajian seminggu, estimasi asupan Anda dari produk ini saja adalah:")
 
-            # Tampilan hasil dengan progress bar
-            # Gula
             percent_gula = (total_gula / limit_gula) * 100 if limit_gula > 0 else 0
             st.write(f"**Gula**: **{total_gula:.1f}g** / {limit_gula:.1f}g dari batas maksimal periode.")
             st.progress(min(int(percent_gula), 100))
@@ -1235,7 +1015,6 @@ elif app_mode == "Simulasi Konsumsi":
             elif percent_gula > 50:
                 st.warning(f"🟡 Perhatian. Konsumsi produk ini menggunakan **{percent_gula:.0f}%** dari alokasi gula Anda untuk periode ini.")
 
-            # Natrium
             percent_natrium = (total_natrium / limit_natrium) * 100 if limit_natrium > 0 else 0
             st.write(f"**Natrium**: **{total_natrium / 1000:.2f}g** / {limit_natrium / 1000:.2f}g dari batas maksimal periode.")
             st.progress(min(int(percent_natrium), 100))
@@ -1244,7 +1023,6 @@ elif app_mode == "Simulasi Konsumsi":
             elif percent_natrium > 50:
                 st.warning(f"🟡 Perhatian. Konsumsi produk ini menggunakan **{percent_natrium:.0f}%** dari alokasi natrium Anda untuk periode ini.")
 
-            # Lemak Jenuh
             percent_lemak_jenuh = (total_lemak_jenuh / limit_lemak_jenuh) * 100 if limit_lemak_jenuh > 0 else 0
             st.write(f"**Lemak Jenuh**: **{total_lemak_jenuh:.1f}g** / {limit_lemak_jenuh:.1f}g dari batas maksimal periode.")
             st.progress(min(int(percent_lemak_jenuh), 100))
@@ -1253,4 +1031,4 @@ elif app_mode == "Simulasi Konsumsi":
             elif percent_lemak_jenuh > 50:
                 st.warning(f"🟡 Perhatian. Konsumsi produk ini menggunakan **{percent_lemak_jenuh:.0f}%** dari alokasi lemak jenuh Anda untuk periode ini.")
 
-            st.caption(f"Perhitungan berdasarkan profil '{user_profile}' selama {simulation_period_months} bulan. Batas asupan ini hanya perkiraan dan tidak termasuk sumber nutrisi lain dalam diet Anda.")
+            st.caption(f"Perhitungan berdasarkan profil '{user_profile}' selama {simulation_period_months} bulan. Ingat, ini baru dari 1 produk, belum memperhitungkan asupan makanan berat Anda sehari-hari.")
