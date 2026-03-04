@@ -319,7 +319,7 @@ def analyze_product_fully(nutrition_data, composition_text, feat_model, lgbm_mod
             "Gula": nutrition_data.get('gula', 0),
             "Protein": nutrition_data.get('protein', 0),
             "Garam": nutrition_data.get('garam', 0),
-            "Natrium Benzoat": 0 # Placeholder, as it's not in the UI
+            "Natrium Benzoat": nutrition_data.get('natrium_benzoat', 0)
         }], columns=numeric_cols_order)
 
         # Scale the numerical data using the pre-fitted scaler
@@ -361,10 +361,11 @@ def analyze_product_fully(nutrition_data, composition_text, feat_model, lgbm_mod
         # --- 5. GENERATE EXPLANATIONS AND RECOMMENDATIONS ---
         # (This part remains a placeholder as in the original code, as XAI for this hybrid model is complex)
         xai_factors = {
-            'Gula': nutrition_data.get('gula', 0),
-            'Natrium / Garam': nutrition_data.get('natrium', 0) or nutrition_data.get('garam', 0) * 1000,
-            'Lemak Total': nutrition_data.get('lemak_total', 0),
-            'Energi Total': nutrition_data.get('energi', 0)
+            'Gula (g)': nutrition_data.get('gula', 0),
+            'Natrium (mg)': nutrition_data.get('natrium', 0) or nutrition_data.get('garam', 0) * 1000,
+            'Lemak Total (g)': nutrition_data.get('lemak_total', 0),
+            'Energi Total (kkal)': nutrition_data.get('energi', 0),
+            'Natrium Benzoat (mg)': nutrition_data.get('natrium_benzoat', 0)
         }
         sorted_factors = dict(sorted(xai_factors.items(), key=lambda item: item[1], reverse=True))
 
@@ -406,7 +407,7 @@ def analyze_product_fully_debug(nutrition_data, composition_text, feat_model, lg
             "Gula": nutrition_data.get('gula', 0),
             "Protein": nutrition_data.get('protein', 0),
             "Garam": nutrition_data.get('garam', 0),
-            "Natrium Benzoat": 0
+            "Natrium Benzoat": nutrition_data.get('natrium_benzoat', 0)
         }], columns=numeric_cols_order)
 
         print("\n=== DEBUG: Numerical Input ===")

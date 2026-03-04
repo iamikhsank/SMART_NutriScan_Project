@@ -114,7 +114,9 @@ def parse_nutrition_text(text):
         'garam': r"garam\s*(?:\(natrium\))?\s*:?\s*(\d+(?:\.\d+)?)\s*g",
 
 
-        'natrium': r"natrium\s*(?:/sodium)?\s*:?\s*(\d+)\s*mg"
+        'natrium': r"natrium\s*(?:/sodium)?\s*:?\s*(\d+)\s*mg",
+
+        'natrium_benzoat': r"natrium\s*benzoat\s*:?\s*(\d+(?:\.\d+)?)\s*mg"
 
 
     }
@@ -305,9 +307,10 @@ if app_mode == "Analisis Produk Tunggal":
             karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=25.0, format="%.1f")
             gula = c6.number_input("Gula (g)", min_value=0.0, value=15.0, format="%.1f")
 
-            c7, c8 = st.columns(2)
+            c7, c8, c9 = st.columns(3)
             garam = c7.number_input("Garam (g)", min_value=0.0, value=0.3, format="%.2f")
             natrium = c8.number_input("Natrium (mg)", min_value=0, value=200)
+            natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=0.0, format="%.2f")
 
             komposisi = st.text_area("Komposisi / Ingredients", "Tepung Terigu, Gula, Minyak Nabati, Cokelat Bubuk, Pengembang, Perisa Sintetik, Garam.")
 
@@ -330,13 +333,23 @@ if app_mode == "Analisis Produk Tunggal":
                 nutrition_data = {
                     'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
                     'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
-                    'garam': garam, 'natrium': natrium
+                    'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
                 }
                 
                 # Call the new, correct analysis function
                 risk_score, xai_factors, recommendation = analyze_product_fully(
                     nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
                 )
+
+                # Update session state for history
+                from datetime import datetime
+                st.session_state.scan_history.append({
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "product_name": product_name,
+                    "risk_score": risk_score,
+                    "profile": user_profile,
+                    "nutrition": nutrition_data
+                })
 
                 with right_col:
                     st.metric(label="Skor Risiko Prediksi", value=f"{risk_score:.2f}%")
@@ -501,13 +514,16 @@ elif app_mode == "Scan from Image":
 
 
 
-            c7, c8 = st.columns(2)
+            c7, c8, c9 = st.columns(3)
 
 
             garam = c7.number_input("Garam (g)", min_value=0.0, value=parsed_data.get('garam', 0.0), format="%.2f")
 
 
             natrium = c8.number_input("Natrium (mg)", min_value=0, value=int(parsed_data.get('natrium', 0)))
+
+
+            natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=parsed_data.get('natrium_benzoat', 0.0), format="%.2f")
 
 
 
@@ -573,7 +589,7 @@ elif app_mode == "Scan from Image":
                     'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
 
 
-                    'garam': garam, 'natrium': natrium
+                    'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
 
 
                 }
@@ -592,7 +608,15 @@ elif app_mode == "Scan from Image":
 
 
 
-
+                # Update session state for history
+                from datetime import datetime
+                st.session_state.scan_history.append({
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "product_name": product_name,
+                    "risk_score": risk_score,
+                    "profile": user_profile,
+                    "nutrition": nutrition_data
+                })
 
                 with right_col:
 
@@ -745,7 +769,8 @@ elif app_mode == "Analisis Batch (Excel)":
                             'karbohidrat': float(row.get('Karbohidrat', 0)),
                             'gula': float(row.get('Gula', 0)),
                             'protein': float(row.get('Protein', 0)),
-                            'garam': float(row.get('Garam', 0))
+                            'garam': float(row.get('Garam', 0)),
+                            'natrium_benzoat': float(row.get('Natrium Benzoat', 0))
                         }
                         composition_text = row.get('Komposisi', "")
 
@@ -786,6 +811,7 @@ elif app_mode == "Perbandingan Produk":
         p_a_karbohidrat = st.number_input("Karbohidrat A (g)", min_value=0.0, value=30.0, format="%.1f")
         p_a_gula = st.number_input("Gula A (g)", min_value=0.0, value=12.0, format="%.1f")
         p_a_natrium = st.number_input("Natrium A (mg)", min_value=0, value=180)
+        p_a_natrium_benzoat = st.number_input("Natrium Benzoat A (mg)", min_value=0.0, value=0.0, format="%.2f")
         p_a_komposisi = st.text_area("Komposisi A", "Gandum Utuh, Gula, Garam.", height=100)
         # Dummy input for garam to maintain data structure, though natrium is primary
         p_a_garam = p_a_natrium / 400 
@@ -800,6 +826,7 @@ elif app_mode == "Perbandingan Produk":
         p_b_karbohidrat = st.number_input("Karbohidrat B (g)", min_value=0.0, value=28.0, format="%.1f")
         p_b_gula = st.number_input("Gula B (g)", min_value=0.0, value=18.0, format="%.1f")
         p_b_natrium = st.number_input("Natrium B (mg)", min_value=0, value=250)
+        p_b_natrium_benzoat = st.number_input("Natrium Benzoat B (mg)", min_value=0.0, value=0.0, format="%.2f")
         p_b_komposisi = st.text_area("Komposisi B", "Jagung, Gula, Sirup Fruktosa, Garam.", height=100)
         # Dummy input for garam
         p_b_garam = p_b_natrium / 400
@@ -813,13 +840,13 @@ elif app_mode == "Perbandingan Produk":
             nutrition_a = {
                 'energi': p_a_energi, 'lemak_total': p_a_lemak_total, 'lemak_jenuh': p_a_lemak_jenuh,
                 'protein': p_a_protein, 'karbohidrat': p_a_karbohidrat, 'gula': p_a_gula,
-                'garam': p_a_garam, 'natrium': p_a_natrium
+                'garam': p_a_garam, 'natrium': p_a_natrium, 'natrium_benzoat': p_a_natrium_benzoat
             }
             # Data untuk Produk B
             nutrition_b = {
                 'energi': p_b_energi, 'lemak_total': p_b_lemak_total, 'lemak_jenuh': p_b_lemak_jenuh,
                 'protein': p_b_protein, 'karbohidrat': p_b_karbohidrat, 'gula': p_b_gula,
-                'garam': p_b_garam, 'natrium': p_b_natrium
+                'garam': p_b_garam, 'natrium': p_b_natrium, 'natrium_benzoat': p_b_natrium_benzoat
             }
 
             # Analisis kedua produk
@@ -867,6 +894,50 @@ elif app_mode == "Perbandingan Produk":
             st.dataframe(df_compare)
 
 
+elif app_mode == "Riwayat Analisis":
+    st.header("9. Riwayat dan Monitoring Konsumsi")
+    st.info("Berikut adalah riwayat analisis produk yang pernah Anda periksa.")
+
+    if len(st.session_state.scan_history) == 0:
+        st.write("Belum ada riwayat analisis.")
+    else:
+        history_df = pd.DataFrame(st.session_state.scan_history)
+        # Menampilkan data riwayat yang telah disaring agar rapi
+        st.dataframe(history_df[["date", "product_name", "risk_score", "profile"]])
+
+        st.markdown("---")
+        st.subheader("Tren Risiko")
+        # Visualisasi sederhana tren risiko produk yang discan
+        st.line_chart(history_df["risk_score"])
+
+        if st.button("Hapus Riwayat"):
+            st.session_state.scan_history = []
+            st.rerun()
+
+
+elif app_mode == "Edukasi Gizi":
+    st.header("10. Edukasi dan Rekomendasi Nutrisi Cerdas")
+
+    st.markdown("### Batas Konsumsi Gizi Harian (Kemenkes RI)")
+    st.info("Pedoman umum konsumsi gula, garam, dan lemak (G4G1L5) per hari untuk dewasa:")
+    st.write("- **Gula:** 4 sendok makan (50 gram)")
+    st.write("- **Garam:** 1 sendok teh (5 gram / 2000 mg Natrium)")
+    st.write("- **Lemak:** 5 sendok makan (67 gram)")
+
+    st.markdown("---")
+    st.markdown("### Membaca Label Informasi Nilai Gizi")
+    st.write("Perhatikan hal-hal berikut saat membaca label kemasan:")
+    st.write("1. **Takaran Saji**: Semua nilai nutrisi yang tercantum biasanya berdasarkan satu takaran saji, bukan satu kemasan penuh.")
+    st.write("2. **Kalori Total**: Perhatikan total kalori per sajian, terutama jika Anda sedang mengatur berat badan.")
+    st.write("3. **Natrium/Garam**: Banyak produk camilan dan minuman kemasan menyembunyikan kadar natrium yang sangat tinggi.")
+
+    st.markdown("---")
+    st.markdown("### Alternatif Makanan Sehat")
+    st.write("- **Ganti Minuman Manis**: Gunakan air putih, teh tawar, atau air infus buah.")
+    st.write("- **Camilan Sehat**: Pilih buah potong, kacang edamame, atau yogurt tawar dibandingkan keripik kemasan.")
+    st.write("- **Perbanyak Serat**: Konsumsi lebih banyak sayur dan biji-bijian utuh.")
+
+
 elif app_mode == "Simulasi Konsumsi":
     st.header("8. Simulasi Konsumsi Produk")
     st.info("Masukkan detail produk dan perkirakan dampak risikonya berdasarkan frekuensi konsumsi Anda.")
@@ -882,9 +953,10 @@ elif app_mode == "Simulasi Konsumsi":
     protein = c4.number_input("Protein (g)", min_value=0.0, value=0.0, format="%.1f")
     karbohidrat = c5.number_input("Karbohidrat (g)", min_value=0.0, value=40.0, format="%.1f")
     gula = c6.number_input("Gula (g)", min_value=0.0, value=39.0, format="%.1f")
-    c7, c8 = st.columns(2)
+    c7, c8, c9 = st.columns(3)
     garam = c7.number_input("Garam (g)", min_value=0.0, value=0.1, format="%.2f")
     natrium = c8.number_input("Natrium (mg)", min_value=0, value=45)
+    natrium_benzoat = c9.number_input("Natrium Benzoat (mg)", min_value=0.0, value=0.0, format="%.2f")
     komposisi = st.text_area("Komposisi / Ingredients", "Air Berkarbonasi, Gula, Sirup Fruktosa, Perisa Sintetik, Pengatur Keasaman.")
 
     st.markdown("---")
@@ -906,7 +978,7 @@ elif app_mode == "Simulasi Konsumsi":
             nutrition_data = {
                 'energi': energi, 'lemak_total': lemak_total, 'lemak_jenuh': lemak_jenuh,
                 'protein': protein, 'karbohidrat': karbohidrat, 'gula': gula,
-                'garam': garam, 'natrium': natrium
+                'garam': garam, 'natrium': natrium, 'natrium_benzoat': natrium_benzoat
             }
             risk_score, _, _ = analyze_product_fully(
                 nutrition_data, komposisi, feat_model, lgbm_model, w2v_model, scaler
@@ -979,7 +1051,3 @@ elif app_mode == "Simulasi Konsumsi":
                 st.warning(f"🟡 Perhatian. Konsumsi produk ini menggunakan **{percent_lemak_jenuh:.0f}%** dari alokasi lemak jenuh Anda untuk periode ini.")
 
             st.caption(f"Perhitungan berdasarkan profil '{user_profile}' selama {simulation_period_months} bulan. Batas asupan ini hanya perkiraan dan tidak termasuk sumber nutrisi lain dalam diet Anda.")
-else:
-    st.header(app_mode)
-    st.warning(f"Fitur '{app_mode}' sedang dalam tahap pengembangan.")
-    st.info("Kerangka kerja untuk fitur ini telah disiapkan.")
