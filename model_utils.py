@@ -127,66 +127,27 @@ def preprocess_batch_excel_data(df):
     """
     df = df.copy()
     
-    # Nutrition columns that need cleaning
+    # Nutrition columns that need cleaning (only process if they exist)
     numeric_cols = ['Energi', 'Lemak', 'Karbohidrat', 'Gula', 'Protein', 'Garam', 'Natrium Benzoat']
+    existing_cols = [col for col in numeric_cols if col in df.columns]
     
-    for col in numeric_cols:
-        if col in df.columns:
-            # Pass column name for special handling (e.g., Kj to kkal conversion)
-            df[col] = df[col].apply(lambda x: hapus_satuan_dan_bersihkan(x, column_name=col))
+    for col in existing_cols:
+        # Pass column name for special handling (e.g., Kj to kkal conversion)
+        df[col] = df[col].apply(lambda x: hapus_satuan_dan_bersihkan(x, column_name=col))
     
-    # Fill any NaN values with 0
-    df[numeric_cols] = df[numeric_cols].fillna(0)
+    # Fill any NaN values with 0 (only in existing columns)
+    df[existing_cols] = df[existing_cols].fillna(0)
     
     return df
 
 def predict_with_lgbm(model, features):
     """
-    Wrapper untuk LightGBM prediction yang handle sklearn version compatibility issues.
+    Wrapper untuk LightGBM prediction.
     
-    Tries multiple methods to get predictions due to sklearn serialization issues.
+    Model ini sudah di-retrain dengan sklearn/LightGBM versi terbaru,
+    sehingga predict_proba() seharusnya bekerja tanpa masalah.
     """
-    try:
-        # Method 1: Standard predict_proba
-        return model.predict_proba(features)
-    except TypeError as e:
-        if "force_all_finite" in str(e):
-            print("Method 1 failed: sklearn compatibility issue")
-            pass
-        else:
-            raise
-    
-    try:
-        # Method 2: Use predict and convert to proba
-        print("Trying Method 2: predict + manual proba conversion")
-        predictions = model.predict(features)
-        # Convert class predictions to probability format
-        n_classes = len(model.classes_)
-        proba = np.zeros((len(features), n_classes))
-        for i, pred in enumerate(predictions):
-            class_idx = np.where(model.classes_ == pred)[0][0]
-            proba[i, class_idx] = 1.0
-        return proba
-    except Exception as e2:
-        print(f"Method 2 also failed: {e2}")
-        pass
-    
-    try:
-        # Method 3: Direct internal access
-        print("Trying Method 3: Using _raw_predict or _estimate_proba")
-        # Some models have internal methods
-        if hasattr(model, '_raw_predict'):
-            raw_preds = model._raw_predict(features)
-            # Softmax to convert to probabilities
-            exp_preds = np.exp(raw_preds - np.max(raw_preds, axis=1, keepdims=True))
-            return exp_preds / np.sum(exp_preds, axis=1, keepdims=True)
-    except Exception as e3:
-        print(f"Method 3 also failed: {e3}")
-        pass
-    
-    # Fallback: return uniform probabilities
-    print("All methods failed. Returning uniform probabilities as fallback.")
-    return np.ones((len(features), 3)) / 3
+    return model.predict_proba(features)
 
 def load_prediction_models():
     """
@@ -222,18 +183,17 @@ def load_prediction_models():
         lgbm_model = joblib.load(os.path.join(model_path, "model_lgbm_woa_bab3.joblib"))
         w2v_model = Word2Vec.load(os.path.join(model_path, "model_w2v_komposisi.model"))
         
-        # Get the fitted scaler
-        scaler = get_scaler()
         # Load the fitted scaler
         scaler_path = os.path.join(model_path, "scaler.joblib")
         if os.path.exists(scaler_path):
             scaler = joblib.load(scaler_path)
         else:
+            # Fallback: create dummy scaler (should not happen with retrained models)
             print("Warning: scaler.joblib not found. Using dummy scaler (results may be inaccurate).")
             scaler = MinMaxScaler()
             scaler.fit(np.zeros((1, 8)))
 
-        print("All models and scaler loaded successfully.")
+        print("✅ All models and scaler loaded successfully.")
         return feat_model, lgbm_model, w2v_model, scaler
 
     except Exception as e:
@@ -383,7 +343,7 @@ def analyze_product_fully(nutrition_data, composition_text, feat_model, lgbm_mod
 
         # --- 4. FINAL PREDICTION (HYBRID MODEL PART 2) ---
         # Use the LightGBM model to predict on the extracted features
-        # Use wrapper function to handle sklearn compatibility issues
+        # Model has been retrained with current sklearn/LightGBM compatibility
         prediction_proba = predict_with_lgbm(lgbm_model, extracted_features)
         
         # The classes are 'aman' (0), 'sedang' (1), 'tinggi' (2).
@@ -478,16 +438,8 @@ def analyze_product_fully_debug(nutrition_data, composition_text, feat_model, lg
         print(f"All features: {extracted_features[0]}")
         
         # --- 4. FINAL PREDICTION ---
-        # Handle sklearn version compatibility issues
-        try:
-            prediction_proba = lgbm_model.predict_proba(extracted_features)
-        except TypeError as e:
-            if "force_all_finite" in str(e):
-                # Workaround: use wrapper function
-                print(f"WARNING: sklearn compatibility issue detected, using wrapper...")
-                prediction_proba = predict_with_lgbm(lgbm_model, extracted_features)
-            else:
-                raise
+        # Model has been retrained with current sklearn/LightGBM versions
+        prediction_proba = predict_with_lgbm(lgbm_model, extracted_features)
         
         print(f"\n=== DEBUG: LightGBM Probabilities ===")
         print(f"P(aman={0}): {prediction_proba[0][0]:.4f}")
