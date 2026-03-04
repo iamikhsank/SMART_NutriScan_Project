@@ -767,11 +767,12 @@ elif app_mode == "Scan from Image":
                     )
 
                     from datetime import datetime
+                    display_profile = kondisi_medis if kondisi_medis != "Tidak Ada" else f"{user_gender} {user_age} Thn"
                     st.session_state.scan_history.append({
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "product_name": product_name,
                         "risk_score": risk_score,
-                        "profile": user_profile,
+                        "profile": display_profile,
                         "nutrition": nutrition_data
                     })
 
