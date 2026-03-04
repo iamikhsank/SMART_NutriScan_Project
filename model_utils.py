@@ -219,7 +219,7 @@ def load_prediction_models():
     """Loads all models and the fitted scaler."""
     model_path = "models/"
     try:
-        base_cnn_bilstm = tf.keras.models.load_model(os.path.join(model_path, "cb1_bab3.keras"))
+        base_cnn_bilstm = tf.keras.models.load_model(os.path.join(model_path, "cb1_bab3.keras"), custom_objects={"Orthogonal": Orthogonal})
         
         try:
             output_layer = base_cnn_bilstm.get_layer("fusion_feat").output
