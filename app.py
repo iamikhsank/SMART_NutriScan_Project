@@ -122,43 +122,51 @@ def extract_value_near_keyword(words_list, target_keywords, is_text_search=False
     return 0.0
 
 
-def parse_nutrition_text(detected_text_list):
+def parse_nutrition_text(detected_text_list, is_composition_only=False):
     """
     [UPGRADED]: Menganalisis list string (output OCR asli) menggunakan Fuzzy Search.
+    Bisa mem-parsing seluruh nilai gizi, atau komposisi saja berdasarkan parameter is_composition_only.
     """
     raw_text = " ".join(detected_text_list).replace('\n', ' ')
     words = raw_text.split()
     data = {}
 
-    data['energi'] = extract_value_near_keyword(words, ['energi', 'energy', 'kalori', 'calories'])
-    data['lemak_total'] = extract_value_near_keyword(words, ['lemak', 'fat'])
-    data['lemak_jenuh'] = extract_value_near_keyword(words, ['jenuh', 'saturated'])
-    data['protein'] = extract_value_near_keyword(words, ['protein'])
-    data['karbohidrat'] = extract_value_near_keyword(words, ['karbohidrat', 'carbohydrate', 'karbo'])
-    data['gula'] = extract_value_near_keyword(words, ['gula', 'sugar', 'sukrosa'])
-    data['garam'] = extract_value_near_keyword(words, ['garam', 'salt'])
-    data['natrium'] = extract_value_near_keyword(words, ['natrium', 'sodium'])
-    data['natrium_benzoat'] = extract_value_near_keyword(words, ['benzoat', 'pengawet benzoat'])
+    if not is_composition_only:
+        data['energi'] = extract_value_near_keyword(words, ['energi', 'energy', 'kalori', 'calories'])
+        data['lemak_total'] = extract_value_near_keyword(words, ['lemak', 'fat'])
+        data['lemak_jenuh'] = extract_value_near_keyword(words, ['jenuh', 'saturated'])
+        data['protein'] = extract_value_near_keyword(words, ['protein'])
+        data['karbohidrat'] = extract_value_near_keyword(words, ['karbohidrat', 'carbohydrate', 'karbo'])
+        data['gula'] = extract_value_near_keyword(words, ['gula', 'sugar', 'sukrosa'])
+        data['garam'] = extract_value_near_keyword(words, ['garam', 'salt'])
+        data['natrium'] = extract_value_near_keyword(words, ['natrium', 'sodium'])
+        data['natrium_benzoat'] = extract_value_near_keyword(words, ['benzoat', 'pengawet benzoat'])
 
-    if data.get('garam', 0) > 0 and data.get('natrium', 0) == 0:
-        data['natrium'] = data['garam'] * 400
+        if data.get('garam', 0) > 0 and data.get('natrium', 0) == 0:
+            data['natrium'] = data['garam'] * 400
 
+    # Logic Ekstraksi Komposisi (selalu dijalankan untuk case di mana kedua bagian ada di 1 tabel)
     komposisi_raw = extract_value_near_keyword(words, ['komposisi', 'ingredients', 'bahan-bahan', 'bahan'], is_text_search=True)
     if komposisi_raw:
         komposisi_text = komposisi_raw.strip()
         komposisi_text = re.split(r"mengandung alergen|diproduksi menggunakan|informasi nilai gizi", komposisi_text, flags=re.IGNORECASE)[0]
         data['komposisi'] = komposisi_text.strip().capitalize()
     else:
-        komposisi_match = re.search(r"(?:komposisi|ingredients|daftar bahan)\s*:\s*(.*?)(?:\.|$)", raw_text.lower())
-        if komposisi_match:
-            data['komposisi'] = komposisi_match.group(1).strip().capitalize()
+        # Fallback regex, dan jika ini khusus scan komposisi, asumsikan *semua* teks adalah komposisi
+        if is_composition_only and len(words) > 2:
+            data['komposisi'] = raw_text.strip().capitalize()
         else:
-            data['komposisi'] = "Tidak terdeteksi."
+            komposisi_match = re.search(r"(?:komposisi|ingredients|daftar bahan)\s*:\s*(.*?)(?:\.|$)", raw_text.lower())
+            if komposisi_match:
+                data['komposisi'] = komposisi_match.group(1).strip().capitalize()
+            else:
+                data['komposisi'] = "Tidak terdeteksi."
         
-    if len(words) >= 3:
-        data['product_name'] = " ".join(words[:3]).title()
-    else:
-        data['product_name'] = "Produk Tanpa Nama"
+    if not is_composition_only:
+        if len(words) >= 3:
+            data['product_name'] = " ".join(words[:3]).title()
+        else:
+            data['product_name'] = "Produk Tanpa Nama"
 
     return data
 
@@ -611,45 +619,83 @@ if app_mode == "Analisis Produk Tunggal":
 
 
 elif app_mode == "Scan from Image":
-    st.header("1. Scan Produk Otomatis melalui Foto")
-    st.info("Unggah gambar kemasan produk. Sistem OCR akan membaca informasi gizi, dilanjutkan dengan analitik AI & BI.")
+    st.header("1. Scan Produk Otomatis (Kamera / Galeri)")
+    st.info("Karena letak Informasi Nilai Gizi dan Komposisi Bahan sering terpisah di kemasan, Anda bisa melakukan pemindaian (scan) dua kali menggunakan Kamera langsung atau unggah foto dari Galeri.")
 
-    uploaded_image = st.file_uploader("Pilih gambar produk...", type=["jpg", "jpeg", "png"])
+    # Inisialisasi variabel parsed_data agar tidak error
+    parsed_data = {
+        'energi': 0, 'lemak_total': 0.0, 'lemak_jenuh': 0.0, 'protein': 0.0,
+        'karbohidrat': 0.0, 'gula': 0.0, 'garam': 0.0, 'natrium': 0,
+        'natrium_benzoat': 0.0, 'komposisi': '', 'product_name': ''
+    }
 
-    if uploaded_image is not None:
-        image = Image.open(uploaded_image)
-        
-        col_img, col_proc = st.columns([1, 2])
-        with col_img:
-            st.image(image, caption='Gambar yang Diunggah', use_container_width=True)
+    col_scan1, col_scan2 = st.columns(2)
 
-        with col_proc:
-            with st.spinner("Membaca dan menganalisis teks dari gambar dengan Computer Vision..."):
-                # 1. Preprocessing OpenCV
-                enhanced_image = preprocess_image_for_ocr(image)
+    # ------------------ SCAN 1: NILAI GIZI ------------------
+    with col_scan1:
+        st.markdown("### 📸 Scan 1: Tabel Nilai Gizi")
+        input_type_1 = st.radio("Metode Input Nilai Gizi:", ["Upload File", "Kamera Langsung"], key="radio_1")
 
-                # Tampilkan preview gambar yang sudah di-preprocess ke user (Opsional, agar user paham kerja AI)
-                st.image(enhanced_image, caption="Hasil Preprocessing (Binarization & CLAHE)", use_container_width=True)
+        img_file_1 = None
+        if input_type_1 == "Upload File":
+            img_file_1 = st.file_uploader("Pilih foto Tabel Gizi...", type=["jpg", "jpeg", "png"], key="upload_1")
+        else:
+            img_file_1 = st.camera_input("Ambil foto Tabel Gizi langsung", key="cam_1")
 
-                # 2. Convert to bytes for OCR
-                img_byte_arr = io.BytesIO()
-                enhanced_image.save(img_byte_arr, format='PNG')
-                img_byte_arr = img_byte_arr.getvalue()
+        if img_file_1 is not None:
+            image_1 = Image.open(img_file_1)
+            with st.expander("Lihat Hasil Preprocessing OCR Tabel Gizi", expanded=False):
+                with st.spinner("Mengekstraksi Tabel Gizi dengan Computer Vision..."):
+                    enhanced_image_1 = preprocess_image_for_ocr(image_1)
+                    st.image(enhanced_image_1, caption="Binarization & CLAHE (Gizi)", use_container_width=True)
 
-                # 3. Jalankan EasyOCR (sekarang menerima detail per baris/kata agar fuzzy logic lebih akurat)
-                ocr_results = reader.readtext(img_byte_arr, detail=0, paragraph=False)
+                    img_byte_arr_1 = io.BytesIO()
+                    enhanced_image_1.save(img_byte_arr_1, format='PNG')
+                    ocr_results_1 = reader.readtext(img_byte_arr_1.getvalue(), detail=0, paragraph=False)
 
-                # 4. Parsing cerdas menggunakan Fuzzy Matching
-                parsed_data = parse_nutrition_text(ocr_results)
+                    parsed_gizi = parse_nutrition_text(ocr_results_1, is_composition_only=False)
+                    # Update global data dari parse 1
+                    for k, v in parsed_gizi.items():
+                        if v != 0 and v != "Tidak terdeteksi." and v != "Produk Tanpa Nama":
+                            parsed_data[k] = v
+                    st.success("Tabel Gizi berhasil diproses!")
 
-            st.success("✨ Teks berhasil dibaca! Silakan lengkapi 'Takaran Saji' dan koreksi data jika perlu.")
+    # ------------------ SCAN 2: KOMPOSISI ------------------
+    with col_scan2:
+        st.markdown("### 📸 Scan 2: Teks Komposisi (Opsional)")
+        st.caption("Gunakan jika letak komposisi jauh dari tabel gizi.")
+        input_type_2 = st.radio("Metode Input Komposisi:", ["Upload File", "Kamera Langsung"], key="radio_2")
 
-        st.markdown("---")
+        img_file_2 = None
+        if input_type_2 == "Upload File":
+            img_file_2 = st.file_uploader("Pilih foto Teks Komposisi...", type=["jpg", "jpeg", "png"], key="upload_2")
+        else:
+            img_file_2 = st.camera_input("Ambil foto Teks Komposisi langsung", key="cam_2")
 
+        if img_file_2 is not None:
+            image_2 = Image.open(img_file_2)
+            with st.expander("Lihat Hasil Preprocessing OCR Komposisi", expanded=False):
+                with st.spinner("Mengekstraksi Teks Komposisi dengan Computer Vision..."):
+                    enhanced_image_2 = preprocess_image_for_ocr(image_2)
+                    st.image(enhanced_image_2, caption="Binarization & CLAHE (Komposisi)", use_container_width=True)
+
+                    img_byte_arr_2 = io.BytesIO()
+                    enhanced_image_2.save(img_byte_arr_2, format='PNG')
+                    ocr_results_2 = reader.readtext(img_byte_arr_2.getvalue(), detail=0, paragraph=False)
+
+                    parsed_komposisi = parse_nutrition_text(ocr_results_2, is_composition_only=True)
+                    if parsed_komposisi['komposisi'] != "Tidak terdeteksi.":
+                        parsed_data['komposisi'] = parsed_komposisi['komposisi']
+                    st.success("Teks Komposisi berhasil diproses!")
+
+    st.markdown("---")
+
+    if img_file_1 is not None or img_file_2 is not None:
         main_col, right_col = st.columns([1.8, 1.2])
 
         with main_col:
-            st.subheader("Input Informasi Produk (Hasil OCR)")
+            st.subheader("📝 Konfirmasi Data Input (Hasil OCR)")
+            st.info("Silakan lengkapi **Takaran Saji** dan koreksi jika ada salah baca.")
             
             product_name = st.text_input("Nama Produk", value=parsed_data.get('product_name', ''))
 
