@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 import io
 import re
+import plotly.express as px
+import plotly.graph_objects as go
 
 import scipy.linalg
 
@@ -363,9 +365,63 @@ if app_mode == "Analisis Produk Tunggal":
                         st.success("🟢 Risiko Rendah")
 
                     st.markdown("---")
-                    st.markdown("#### Faktor Risiko Utama (XAI)")
-                    df_xai = pd.DataFrame(list(xai_factors.values()), index=list(xai_factors.keys()), columns=['Nilai Input'])
-                    st.bar_chart(df_xai)
+                    st.markdown("#### Profil Risiko & Kontribusi Nutrisi")
+
+                    # Membuat Radar Chart (Spider Web) interaktif menggunakan Plotly Graph Objects
+                    categories = list(xai_factors.keys())
+                    values = list(xai_factors.values())
+
+                    # Normalisasi sederhana untuk tujuan visualisasi radar agar skalanya mirip (0-100)
+                    # Ini murni untuk UX agar bentuk jaringnya seimbang meskipun satuannya beda (g vs mg vs kkal)
+                    norm_values = []
+                    for k, v in xai_factors.items():
+                        if 'gula' in k.lower(): norm_values.append(min((v / 50) * 100, 100)) # batas max visual 50g
+                        elif 'natrium' in k.lower() and 'benzoat' not in k.lower(): norm_values.append(min((v / 1500) * 100, 100)) # batas max visual 1500mg
+                        elif 'lemak' in k.lower(): norm_values.append(min((v / 67) * 100, 100)) # batas max visual 67g
+                        elif 'energi' in k.lower(): norm_values.append(min((v / 2000) * 100, 100)) # batas max visual 2000kkal
+                        else: norm_values.append(min((v / 100) * 100, 100)) # fallback
+
+                    fig_radar = go.Figure()
+
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=norm_values + [norm_values[0]], # Tutup kurva radar
+                        theta=categories + [categories[0]],
+                        fill='toself',
+                        name='Kandungan Produk',
+                        line_color='red' if risk_score > 50 else 'orange' if risk_score > 25 else 'green',
+                        hovertemplate="Feature: %{theta}<br>Skor Relatif: %{r:.1f}/100<extra></extra>"
+                    ))
+
+                    fig_radar.update_layout(
+                        polar=dict(
+                            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
+                        ),
+                        showlegend=False,
+                        title="Peta Radar Risiko Fitur (Relatif thd Batas Harian)",
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        height=350
+                    )
+
+                    st.plotly_chart(fig_radar, use_container_width=True)
+
+                    # Tampilkan nilai riil dalam bentuk indikator bar yang lebih informatif
+                    st.markdown("##### Nilai Kandungan Nutrisi:")
+                    df_xai = pd.DataFrame({
+                        "Nutrisi": categories,
+                        "Kandungan": values
+                    })
+
+                    fig_bar = px.bar(
+                        df_xai,
+                        y="Nutrisi",
+                        x="Kandungan",
+                        orientation='h',
+                        color="Kandungan",
+                        color_continuous_scale="Reds" if risk_score > 50 else "Oranges" if risk_score > 25 else "Greens",
+                        text_auto='.1f'
+                    )
+                    fig_bar.update_layout(height=250, margin=dict(l=20, r=20, t=10, b=20), coloraxis_showscale=False)
+                    st.plotly_chart(fig_bar, use_container_width=True)
 
                     st.markdown("---")
                     st.markdown("#### Rekomendasi Konsumsi")
@@ -654,17 +710,61 @@ elif app_mode == "Scan from Image":
                     st.markdown("---")
 
 
-                    st.markdown("#### Faktor Risiko Utama (XAI)")
+                    st.markdown("#### Profil Risiko & Kontribusi Nutrisi")
 
+                    # Membuat Radar Chart (Spider Web) interaktif menggunakan Plotly Graph Objects
+                    categories = list(xai_factors.keys())
+                    values = list(xai_factors.values())
 
-                    df_xai = pd.DataFrame(list(xai_factors.values()), index=list(xai_factors.keys()), columns=['Nilai Input'])
+                    # Normalisasi sederhana untuk tujuan visualisasi radar agar skalanya mirip (0-100)
+                    norm_values = []
+                    for k, v in xai_factors.items():
+                        if 'gula' in k.lower(): norm_values.append(min((v / 50) * 100, 100))
+                        elif 'natrium' in k.lower() and 'benzoat' not in k.lower(): norm_values.append(min((v / 1500) * 100, 100))
+                        elif 'lemak' in k.lower(): norm_values.append(min((v / 67) * 100, 100))
+                        elif 'energi' in k.lower(): norm_values.append(min((v / 2000) * 100, 100))
+                        else: norm_values.append(min((v / 100) * 100, 100))
 
+                    fig_radar = go.Figure()
 
-                    st.bar_chart(df_xai)
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=norm_values + [norm_values[0]],
+                        theta=categories + [categories[0]],
+                        fill='toself',
+                        name='Kandungan Produk',
+                        line_color='red' if risk_score > 50 else 'orange' if risk_score > 25 else 'green',
+                        hovertemplate="Feature: %{theta}<br>Skor Relatif: %{r:.1f}/100<extra></extra>"
+                    ))
 
+                    fig_radar.update_layout(
+                        polar=dict(
+                            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
+                        ),
+                        showlegend=False,
+                        title="Peta Radar Risiko Fitur (Relatif thd Batas Harian)",
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        height=350
+                    )
 
+                    st.plotly_chart(fig_radar, use_container_width=True)
 
+                    st.markdown("##### Nilai Kandungan Nutrisi:")
+                    df_xai = pd.DataFrame({
+                        "Nutrisi": categories,
+                        "Kandungan": values
+                    })
 
+                    fig_bar = px.bar(
+                        df_xai,
+                        y="Nutrisi",
+                        x="Kandungan",
+                        orientation='h',
+                        color="Kandungan",
+                        color_continuous_scale="Reds" if risk_score > 50 else "Oranges" if risk_score > 25 else "Greens",
+                        text_auto='.1f'
+                    )
+                    fig_bar.update_layout(height=250, margin=dict(l=20, r=20, t=10, b=20), coloraxis_showscale=False)
+                    st.plotly_chart(fig_bar, use_container_width=True)
 
                     st.markdown("---")
 
@@ -884,14 +984,33 @@ elif app_mode == "Perbandingan Produk":
                 st.info("Kedua produk memiliki skor risiko yang sama.")
 
             # Menampilkan perbandingan nutrisi kunci
-            st.subheader("Perbandingan Nutrisi Kunci")
-            data_compare = {
-                "Nutrisi": ["Gula (g)", "Natrium (mg)", "Lemak Jenuh (g)"],
-                p_a_name: [p_a_gula, p_a_natrium, p_a_lemak_jenuh],
-                p_b_name: [p_b_gula, p_b_natrium, p_b_lemak_jenuh]
-            }
-            df_compare = pd.DataFrame(data_compare).set_index("Nutrisi")
-            st.dataframe(df_compare)
+            st.subheader("Visualisasi Perbandingan Nutrisi")
+
+            # Grouped Bar Chart untuk membandingkan secara langsung
+            df_compare = pd.DataFrame({
+                "Nutrisi": ["Gula (g)", "Natrium (mg)", "Lemak Jenuh (g)", "Energi (kkal)", "Lemak Total (g)"],
+                p_a_name: [p_a_gula, p_a_natrium, p_a_lemak_jenuh, p_a_energi, p_a_lemak_total],
+                p_b_name: [p_b_gula, p_b_natrium, p_b_lemak_jenuh, p_b_energi, p_b_lemak_total]
+            })
+
+            # Melt DataFrame untuk format yang diterima Plotly Express
+            df_melted = df_compare.melt(id_vars=["Nutrisi"], var_name="Produk", value_name="Kandungan")
+
+            fig_compare_bar = px.bar(
+                df_melted,
+                x="Nutrisi",
+                y="Kandungan",
+                color="Produk",
+                barmode="group",
+                title=f"Perbandingan Nutrisi: {p_a_name} vs {p_b_name}",
+                text_auto='.1f'
+            )
+            fig_compare_bar.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig_compare_bar, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("Tabel Detail Perbandingan")
+            st.dataframe(df_compare.set_index("Nutrisi"))
 
 
 elif app_mode == "Riwayat Analisis":
@@ -902,15 +1021,99 @@ elif app_mode == "Riwayat Analisis":
         st.write("Belum ada riwayat analisis.")
     else:
         history_df = pd.DataFrame(st.session_state.scan_history)
-        # Menampilkan data riwayat yang telah disaring agar rapi
-        st.dataframe(history_df[["date", "product_name", "risk_score", "profile"]])
+
+        # Categorize risk scores for visualization
+        def categorize_risk(score):
+            if score > 75: return "Sangat Tinggi"
+            elif score > 50: return "Tinggi"
+            elif score > 25: return "Sedang"
+            else: return "Rendah"
+
+        history_df["Kategori Risiko"] = history_df["risk_score"].apply(categorize_risk)
+
+        # 1. Tabel Riwayat
+        st.subheader("Data Riwayat")
+        st.dataframe(history_df[["date", "product_name", "risk_score", "Kategori Risiko", "profile"]].style.format({"risk_score": "{:.2f}%"}))
 
         st.markdown("---")
-        st.subheader("Tren Risiko")
-        # Visualisasi sederhana tren risiko produk yang discan
-        st.line_chart(history_df["risk_score"])
 
-        if st.button("Hapus Riwayat"):
+        # 2. Visualisasi Dashboard
+        st.subheader("Dashboard Analisis Riwayat")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Pie Chart - Proporsi Kategori Risiko
+            fig_pie = px.pie(
+                history_df,
+                names="Kategori Risiko",
+                title="Proporsi Kategori Risiko Produk",
+                color="Kategori Risiko",
+                color_discrete_map={
+                    "Sangat Tinggi": "darkred",
+                    "Tinggi": "red",
+                    "Sedang": "orange",
+                    "Rendah": "green"
+                },
+                hole=0.4
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col2:
+            # Line Chart - Tren Skor Risiko
+            fig_line = px.line(
+                history_df,
+                x="date",
+                y="risk_score",
+                title="Tren Skor Risiko Konsumsi Seiring Waktu",
+                markers=True,
+                hover_data=["product_name"]
+            )
+            fig_line.add_hrect(y0=0, y1=25, line_width=0, fillcolor="green", opacity=0.1)
+            fig_line.add_hrect(y0=25, y1=50, line_width=0, fillcolor="orange", opacity=0.1)
+            fig_line.add_hrect(y0=50, y1=75, line_width=0, fillcolor="red", opacity=0.1)
+            fig_line.add_hrect(y0=75, y1=100, line_width=0, fillcolor="darkred", opacity=0.1)
+            fig_line.update_yaxes(title="Skor Risiko (%)", range=[0, 100])
+            st.plotly_chart(fig_line, use_container_width=True)
+
+        st.markdown("---")
+
+        # 3. Scatter Plot Kompleks - Korelasi Gula dan Natrium vs Risiko
+        st.subheader("Korelasi Kandungan Nutrisi Utama dan Risiko")
+        st.info("Visualisasi ini memetakan kadar Gula dan Natrium produk yang pernah Anda periksa. Ukuran gelembung mewakili Skor Risiko.")
+
+        # Ekstrak data nutrisi untuk plotting
+        sugar_data = [item.get("gula", 0) for item in history_df["nutrition"]]
+        sodium_data = [item.get("natrium", 0) for item in history_df["nutrition"]]
+
+        scatter_df = pd.DataFrame({
+            "Produk": history_df["product_name"],
+            "Gula (g)": sugar_data,
+            "Natrium (mg)": sodium_data,
+            "Skor Risiko": history_df["risk_score"],
+            "Kategori": history_df["Kategori Risiko"]
+        })
+
+        fig_scatter = px.scatter(
+            scatter_df,
+            x="Gula (g)",
+            y="Natrium (mg)",
+            size="Skor Risiko",
+            color="Kategori",
+            hover_name="Produk",
+            title="Peta Risiko Berdasarkan Kandungan Gula dan Natrium",
+            size_max=30,
+            color_discrete_map={
+                "Sangat Tinggi": "darkred",
+                "Tinggi": "red",
+                "Sedang": "orange",
+                "Rendah": "green"
+            }
+        )
+        st.plotly_chart(fig_scatter, use_container_width=True)
+
+        st.markdown("---")
+        if st.button("Hapus Riwayat", type="secondary"):
             st.session_state.scan_history = []
             st.rerun()
 
