@@ -5,6 +5,7 @@ Pillow
 scikit-learn
 tensorflow==2.16.1
 gensim
+lightgbm
 opencv-python-headless
 easyocr
 joblib
