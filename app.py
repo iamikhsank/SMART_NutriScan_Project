@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 import io
 import re
+import cv2
+import difflib
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -62,190 +64,101 @@ def to_excel(df):
     return processed_data
 
 
-def parse_nutrition_text(text):
-
-
+def preprocess_image_for_ocr(pil_image):
     """
-
-
-    Menganalisis teks OCR untuk mengekstrak informasi nutrisi dan komposisi.
-
-
-    Menggunakan regex yang lebih fleksibel.
-
-
+    [EXPERT COMPUTER VISION]: Preprocessing gambar tabel nutrisi.
+    Menggunakan OpenCV untuk mengatasi blur, glare (kilau), dan meningkatkan kontras teks.
     """
+    open_cv_image = np.array(pil_image)
+    if len(open_cv_image.shape) > 2 and open_cv_image.shape[2] == 4:
+        open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGBA2RGB)
+    if len(open_cv_image.shape) == 3:
+        gray = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = open_cv_image
 
-
-    # Normalisasi teks: ganti koma desimal, hapus spasi berlebih
-
-
-    text = text.replace(',', '.').lower()
-
-
-    text = re.sub(r'\s+', ' ', text)
-
-
-
-
-
-    # Pola regex yang lebih kuat
-
-
-    patterns = {
-
-
-        'energi': r"(?:energi|energy)\s*(?:dari\s*lemak)?\s*:?\s*(\d+(?:\.\d+)?)",
-
-
-        'lemak_total': r"(?:lemak|fat)\s*total\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'lemak_jenuh': r"(?:lemak|fat)\s*jenuh\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'protein': r"protein\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'karbohidrat': r"karbohidrat\s*total\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'gula': r"gula\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'garam': r"garam\s*(?:\(natrium\))?\s*:?\s*(\d+(?:\.\d+)?)\s*g",
-
-
-        'natrium': r"natrium\s*(?:/sodium)?\s*:?\s*(\d+)\s*mg",
-
-        'natrium_benzoat': r"natrium\s*benzoat\s*:?\s*(\d+(?:\.\d+)?)\s*mg"
-
-
-    }
-
-
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    enhanced_gray = clahe.apply(gray)
     
+    thresh = cv2.adaptiveThreshold(enhanced_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    kernel = np.ones((1, 1), np.uint8)
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    return Image.fromarray(opening)
 
 
+def extract_value_near_keyword(words_list, target_keywords, is_text_search=False):
+    """
+    [EXPERT NLP]: Fuzzy Matching untuk mengekstrak angka dari tabel berantakan.
+    """
+    best_match = None
+    match_idx = -1
+
+    for i, word in enumerate(words_list):
+        matches = difflib.get_close_matches(word.lower(), target_keywords, n=1, cutoff=0.7)
+        if matches:
+            best_match = word
+            match_idx = i
+            break
+
+    if match_idx == -1:
+        return "" if is_text_search else 0.0
+
+    if is_text_search:
+        rest_of_text = " ".join(words_list[match_idx+1:])
+        return rest_of_text
+
+    search_window = words_list[match_idx+1 : match_idx+8]
+    for w in search_window:
+        cleaned_num = re.sub(r'[^\d.,]', '', w)
+        if cleaned_num.endswith('.') or cleaned_num.endswith(','):
+            cleaned_num = cleaned_num[:-1]
+        cleaned_num = cleaned_num.replace(',', '.')
+        try:
+            val = float(cleaned_num)
+            return val
+        except ValueError:
+            continue
+    return 0.0
+
+
+def parse_nutrition_text(detected_text_list):
+    """
+    [UPGRADED]: Menganalisis list string (output OCR asli) menggunakan Fuzzy Search.
+    """
+    raw_text = " ".join(detected_text_list).replace('\n', ' ')
+    words = raw_text.split()
     data = {}
 
-
-    # Ekstraksi nilai nutrisi
-
-
-    for key, pattern in patterns.items():
-
-
-        match = re.search(pattern, text)
-
-
-        if match:
-
-
-            try:
-
-
-                data[key] = float(match.group(1))
-
-
-            except (ValueError, IndexError):
-
-
-                data[key] = 0.0
-
-
-        else:
-
-
-            data[key] = 0.0
-
-
-
-
-
-    # Logika fallback untuk Natrium dari Garam
-
+    data['energi'] = extract_value_near_keyword(words, ['energi', 'energy', 'kalori', 'calories'])
+    data['lemak_total'] = extract_value_near_keyword(words, ['lemak', 'fat'])
+    data['lemak_jenuh'] = extract_value_near_keyword(words, ['jenuh', 'saturated'])
+    data['protein'] = extract_value_near_keyword(words, ['protein'])
+    data['karbohidrat'] = extract_value_near_keyword(words, ['karbohidrat', 'carbohydrate', 'karbo'])
+    data['gula'] = extract_value_near_keyword(words, ['gula', 'sugar', 'sukrosa'])
+    data['garam'] = extract_value_near_keyword(words, ['garam', 'salt'])
+    data['natrium'] = extract_value_near_keyword(words, ['natrium', 'sodium'])
+    data['natrium_benzoat'] = extract_value_near_keyword(words, ['benzoat', 'pengawet benzoat'])
 
     if data.get('garam', 0) > 0 and data.get('natrium', 0) == 0:
+        data['natrium'] = data['garam'] * 400
 
-
-        data['natrium'] = data['garam'] * 400  # 1g garam ~= 400mg natrium
-
-
-
-
-
-    # Ekstraksi komposisi yang lebih canggih
-
-
-    komposisi_match = re.search(r"(?:komposisi|ingredients|daftar bahan)\s*:\s*(.*?)(?:\.|$)", text)
-
-
-    if komposisi_match:
-
-
-        # Mengambil semua teks setelah 'komposisi:' sampai titik atau akhir baris
-
-
-        komposisi_text = komposisi_match.group(1).strip()
-
-
-        # Membersihkan dari info alergen yang mungkin menempel
-
-
-        komposisi_text = re.split(r"mengandung alergen", komposisi_text, flags=re.IGNORECASE)[0]
-
-
+    komposisi_raw = extract_value_near_keyword(words, ['komposisi', 'ingredients', 'bahan-bahan', 'bahan'], is_text_search=True)
+    if komposisi_raw:
+        komposisi_text = komposisi_raw.strip()
+        komposisi_text = re.split(r"mengandung alergen|diproduksi menggunakan|informasi nilai gizi", komposisi_text, flags=re.IGNORECASE)[0]
         data['komposisi'] = komposisi_text.strip().capitalize()
-
-
     else:
-
-
-        data['komposisi'] = "Tidak terdeteksi."
-
-
-        
-
-
-    # Ekstraksi nama produk (jika memungkinkan)
-
-
-    # Ini adalah heuristik sederhana dan mungkin perlu disesuaikan
-
-
-    product_name_match = re.search(r"^(.*?)\s*(?:informasi nilai gizi|nutrition facts)", text)
-
-
-    if product_name_match:
-
-
-        data['product_name'] = product_name_match.group(1).strip().title()
-
-
-    else:
-
-
-        # Fallback jika pola utama tidak ditemukan
-
-
-        lines = text.split('\n')
-
-
-        if lines:
-
-
-            data['product_name'] = lines[0].strip().title()
-
-
+        komposisi_match = re.search(r"(?:komposisi|ingredients|daftar bahan)\s*:\s*(.*?)(?:\.|$)", raw_text.lower())
+        if komposisi_match:
+            data['komposisi'] = komposisi_match.group(1).strip().capitalize()
         else:
-
-
-            data['product_name'] = "Produk Tanpa Nama"
-
-
-
-
+            data['komposisi'] = "Tidak terdeteksi."
+        
+    if len(words) >= 3:
+        data['product_name'] = " ".join(words[:3]).title()
+    else:
+        data['product_name'] = "Produk Tanpa Nama"
 
     return data
 
@@ -711,14 +624,23 @@ elif app_mode == "Scan from Image":
             st.image(image, caption='Gambar yang Diunggah', use_container_width=True)
 
         with col_proc:
-            with st.spinner("Membaca dan menganalisis teks dari gambar..."):
+            with st.spinner("Membaca dan menganalisis teks dari gambar dengan Computer Vision..."):
+                # 1. Preprocessing OpenCV
+                enhanced_image = preprocess_image_for_ocr(image)
+
+                # Tampilkan preview gambar yang sudah di-preprocess ke user (Opsional, agar user paham kerja AI)
+                st.image(enhanced_image, caption="Hasil Preprocessing (Binarization & CLAHE)", use_container_width=True)
+
+                # 2. Convert to bytes for OCR
                 img_byte_arr = io.BytesIO()
-                image.save(img_byte_arr, format='PNG')
+                enhanced_image.save(img_byte_arr, format='PNG')
                 img_byte_arr = img_byte_arr.getvalue()
 
-                ocr_results = reader.readtext(img_byte_arr, detail=0, paragraph=True)
-                detected_text = " ".join(ocr_results)
-                parsed_data = parse_nutrition_text(detected_text)
+                # 3. Jalankan EasyOCR (sekarang menerima detail per baris/kata agar fuzzy logic lebih akurat)
+                ocr_results = reader.readtext(img_byte_arr, detail=0, paragraph=False)
+
+                # 4. Parsing cerdas menggunakan Fuzzy Matching
+                parsed_data = parse_nutrition_text(ocr_results)
 
             st.success("✨ Teks berhasil dibaca! Silakan lengkapi 'Takaran Saji' dan koreksi data jika perlu.")
 
