@@ -350,6 +350,147 @@ def render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohi
         st.warning(f"⚠️ 1 Porsi produk ini menghabiskan **{pct_lemak_jenuh:.1f}%** jatah lemak jenuh harian Anda!")
 
 
+# --- FUNGSI HELPER UNTUK EXPORT HTML REPORT ---
+def generate_html_report(product_name, risk_score, recommendation, upf_ingredients, nutrition_data, tdee_profile, kepadatan_energi, takaran_saji):
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    upf_status = "YA (Mengandung Aditif Sintetik)" if len(upf_ingredients) > 0 else "TIDAK (Relatif Alami)"
+    upf_details = ", ".join(upf_ingredients) if len(upf_ingredients) > 0 else "-"
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <title>Health Report: {product_name}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; }}
+            .header {{ text-align: center; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }}
+            .section {{ margin-top: 20px; }}
+            .risk-high {{ color: #D32F2F; font-weight: bold; }}
+            .risk-med {{ color: #F57C00; font-weight: bold; }}
+            .risk-low {{ color: #388E3C; font-weight: bold; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .footer {{ margin-top: 40px; font-size: 12px; text-align: center; color: #777; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h2>SMART NutriScan AI - Executive Health Report</h2>
+            <p>Tanggal Cetak: {now_str}</p>
+        </div>
+
+        <div class="section">
+            <h3>Informasi Produk</h3>
+            <p><strong>Nama Produk:</strong> {product_name}</p>
+            <p><strong>Takaran Saji Analisis:</strong> {takaran_saji} g/ml</p>
+        </div>
+
+        <div class="section">
+            <h3>Hasil Prediksi AI</h3>
+            <p><strong>Skor Risiko Machine Learning:</strong> {risk_score:.2f}%</p>
+            <p><strong>Rekomendasi Konsumsi:</strong> {recommendation}</p>
+            <p><strong>Status Ultra-Processed Food (UPF):</strong> {upf_status}</p>
+            <p><strong>Aditif Terdeteksi (NLP):</strong> {upf_details}</p>
+        </div>
+
+        <div class="section">
+            <h3>Business Intelligence & Health Metrics</h3>
+            <p><strong>Profil Kebutuhan Pengguna:</strong> Kalori {tdee_profile['kalori']:.0f} kkal | Gula {tdee_profile['gula']:.1f} g | Natrium {tdee_profile['natrium']} mg</p>
+            <p><strong>Kepadatan Energi:</strong> {kepadatan_energi:.2f} kkal/g</p>
+
+            <table>
+                <tr>
+                    <th>Nutrisi</th>
+                    <th>Kandungan per Saji</th>
+                    <th>% Pemenuhan Batas Harian Profil</th>
+                </tr>
+                <tr>
+                    <td>Gula</td>
+                    <td>{nutrition_data.get('gula', 0)} g</td>
+                    <td>{((nutrition_data.get('gula', 0) / tdee_profile['gula']) * 100):.1f}%</td>
+                </tr>
+                <tr>
+                    <td>Natrium</td>
+                    <td>{nutrition_data.get('natrium', 0)} mg</td>
+                    <td>{((nutrition_data.get('natrium', 0) / tdee_profile['natrium']) * 100):.1f}%</td>
+                </tr>
+                <tr>
+                    <td>Lemak Jenuh</td>
+                    <td>{nutrition_data.get('lemak_jenuh', 0)} g</td>
+                    <td>{((nutrition_data.get('lemak_jenuh', 0) / tdee_profile['lemak_jenuh']) * 100):.1f}%</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>Laporan ini digenerate secara otomatis oleh model Hybrid CBLIGHT-WOA & BI Analytics.</p>
+        </div>
+    </body>
+    </html>
+    """
+    return html_content
+
+
+# --- FUNGSI HELPER UNTUK DETEKSI NLP UPF ---
+def deteksi_upf_nlp(komposisi_text):
+    """
+    Fungsi NLP/Regex untuk mendeteksi bahan kimia yang mengindikasikan
+    produk adalah Ultra-Processed Food (UPF).
+    """
+    upf_keywords = [
+        "aspartam", "sukralosa", "sirup fruktosa", "fruktosa sirup", "maltodekstrin",
+        "perisa sintetik", "pewarna sintetik", "tartrazin", "karmoisin", "eritrosin",
+        "pengawet", "natrium benzoat", "kalium sorbat", "penguat rasa", "msg",
+        "mononatrium glutamat", "tbhq", "bht", "pengembang sintetik", "pemanis buatan"
+    ]
+
+    found_ingredients = []
+    text_lower = str(komposisi_text).lower()
+
+    for kw in upf_keywords:
+        if kw in text_lower:
+            found_ingredients.append(kw.title())
+
+    return found_ingredients
+
+# --- FUNGSI HELPER UNTUK KALKULASI TDEE ---
+def hitung_tdee_dinamis(gender, usia, berat, tinggi, aktivitas):
+    # Rumus BMR Mifflin-St Jeor
+    if gender == "Pria":
+        bmr = (10 * berat) + (6.25 * tinggi) - (5 * usia) + 5
+    else:
+        bmr = (10 * berat) + (6.25 * tinggi) - (5 * usia) - 161
+
+    # Faktor Aktivitas Fisik
+    faktor = {
+        "Sedentary (Jarang Olahraga)": 1.2,
+        "Ringan (Olahraga 1-3x/minggu)": 1.375,
+        "Sedang (Olahraga 3-5x/minggu)": 1.55,
+        "Aktif (Olahraga 6-7x/minggu)": 1.725,
+        "Sangat Aktif (Pekerja Fisik / Atlet)": 1.9
+    }
+
+    tdee = bmr * faktor.get(aktivitas, 1.2)
+
+    # Perhitungan Threshold Gizi (Standar WHO)
+    # Gula: Max 10% dari total kalori (1g gula = 4 kkal)
+    max_gula_g = (tdee * 0.10) / 4
+
+    # Lemak Jenuh: Max 10% dari total kalori (1g lemak = 9 kkal)
+    max_lemak_jenuh_g = (tdee * 0.10) / 9
+
+    return {
+        "kalori": tdee,
+        "gula": max_gula_g,
+        "lemak_jenuh": max_lemak_jenuh_g,
+        "natrium": 2000 # Standar natrium harian umumnya flat 2000mg untuk orang sehat
+    }
+
+
 # --- UI Aplikasi ---
 
 # --- Sidebar ---
@@ -357,22 +498,52 @@ with st.sidebar:
     st.image("assets/Logo Smart NutriScan AI.png", width=150)
     st.title("SMART NutriScan AI")
     
-    st.header("5. Profil Pengguna")
-    user_profile = st.selectbox(
-        "Pilih profil kesehatan Anda:",
-        ("Dewasa", "Anak-anak", "Lansia", "Penderita Hipertensi", "Risiko Penyakit Ginjal")
+    st.header("⚙️ Profil Personal & BMR")
+
+    # Advanced Personalization (BMR & TDEE)
+    st.markdown("Kustomisasi batas asupan harian Anda.")
+
+    col_g, col_u = st.columns(2)
+    with col_g:
+        user_gender = st.selectbox("Gender", ["Pria", "Wanita"])
+    with col_u:
+        user_age = st.number_input("Usia (Tahun)", min_value=1, max_value=120, value=25)
+
+    col_w, col_h = st.columns(2)
+    with col_w:
+        user_weight = st.number_input("Berat (kg)", min_value=10.0, max_value=300.0, value=65.0)
+    with col_h:
+        user_height = st.number_input("Tinggi (cm)", min_value=50.0, max_value=250.0, value=165.0)
+
+    user_activity = st.selectbox(
+        "Tingkat Aktivitas",
+        ["Sedentary (Jarang Olahraga)", "Ringan (Olahraga 1-3x/minggu)", "Sedang (Olahraga 3-5x/minggu)", "Aktif (Olahraga 6-7x/minggu)", "Sangat Aktif (Pekerja Fisik / Atlet)"]
     )
     
-    # Batas harian sekarang mencakup kebutuhan total sebagai referensi BI metrics
-    # Nilai Gula (g), Natrium (mg), Lemak Jenuh (g) per hari
-    daily_limits = {
-        "Dewasa": {"gula": 50, "natrium": 2000, "lemak_jenuh": 22},
-        "Anak-anak": {"gula": 25, "natrium": 1500, "lemak_jenuh": 16},
-        "Lansia": {"gula": 30, "natrium": 1500, "lemak_jenuh": 20},
-        "Penderita Hipertensi": {"gula": 25, "natrium": 1200, "lemak_jenuh": 18},
-        "Risiko Penyakit Ginjal": {"gula": 25, "natrium": 1000, "lemak_jenuh": 18},
-    }
-    current_threshold = daily_limits[user_profile]
+    # Kondisi Medis Khusus (Bisa override perhitungan TDEE standar)
+    kondisi_medis = st.selectbox("Kondisi Khusus (Opsional)", ["Tidak Ada", "Penderita Hipertensi", "Risiko Penyakit Ginjal", "Anak-anak (Pre-set)"])
+
+    # Kalkulasi
+    calculated_threshold = hitung_tdee_dinamis(user_gender, user_age, user_weight, user_height, user_activity)
+
+    # Terapkan Override jika ada kondisi khusus
+    if kondisi_medis == "Penderita Hipertensi":
+        calculated_threshold["natrium"] = 1200
+    elif kondisi_medis == "Risiko Penyakit Ginjal":
+        calculated_threshold["natrium"] = 1000
+        calculated_threshold["kalori"] = calculated_threshold["kalori"] * 0.9 # Penyesuaian umum
+    elif kondisi_medis == "Anak-anak (Pre-set)":
+        calculated_threshold["gula"] = 25
+        calculated_threshold["natrium"] = 1500
+
+    # Set sebagai threshold yang aktif digunakan
+    current_threshold = calculated_threshold
+
+    with st.expander("Lihat Kebutuhan Harian Anda (AKG)", expanded=False):
+        st.write(f"**Kalori (TDEE):** {current_threshold['kalori']:.0f} kkal")
+        st.write(f"**Max Gula:** {current_threshold['gula']:.1f} g")
+        st.write(f"**Max Lemak Jenuh:** {current_threshold['lemak_jenuh']:.1f} g")
+        st.write(f"**Max Natrium:** {current_threshold['natrium']} mg")
 
     st.markdown("---")
     
@@ -439,11 +610,12 @@ if app_mode == "Analisis Produk Tunggal":
                     )
 
                     from datetime import datetime
+                    display_profile = kondisi_medis if kondisi_medis != "Tidak Ada" else f"{user_gender} {user_age} Thn"
                     st.session_state.scan_history.append({
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "product_name": product_name,
                         "risk_score": risk_score,
-                        "profile": user_profile,
+                        "profile": display_profile,
                         "nutrition": nutrition_data
                     })
 
@@ -493,13 +665,36 @@ if app_mode == "Analisis Produk Tunggal":
                     st.markdown("#### Rekomendasi ML")
                     st.info(recommendation)
 
+                    # --- FITUR NLP UPF ---
+                    upf_ingredients = deteksi_upf_nlp(komposisi)
+                    if len(upf_ingredients) > 0:
+                        st.markdown("---")
+                        st.error("🚨 **Peringatan: Makanan Ultra-Proses (UPF)!**")
+                        st.write("Berdasarkan Analisis Teks (NLP), produk ini mengandung bahan aditif sintetik/industri berikut:")
+                        st.write(", ".join([f"**{ing}**" for ing in upf_ingredients]))
+                        st.caption("Konsumsi makanan ultra-proses yang rutin dikaitkan dengan risiko penyakit metabolik jangka panjang.")
+
             else:
                 st.metric(label="Skor Risiko Prediksi", value="-")
                 st.info("Input data dan jalankan analisis untuk melihat detail prediksi risiko, Radar XAI, dan Rekomendasi ML.")
 
         # Eksekusi visualisasi Business & Health Metrics di bawah setelah tombol di-klik
         if analyze_button:
-            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, user_profile)
+            display_profile = kondisi_medis if kondisi_medis != "Tidak Ada" else f"{user_gender} {user_age} Thn"
+            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, display_profile)
+
+            st.markdown("---")
+            # Generate and Download HTML Report
+            kepadatan_energi = energi / takaran_saji if takaran_saji > 0 else 0
+            html_report = generate_html_report(product_name, risk_score, recommendation, upf_ingredients, nutrition_data, current_threshold, kepadatan_energi, takaran_saji)
+
+            st.download_button(
+                label="📥 Download Executive Health Report (HTML)",
+                data=html_report,
+                file_name=f"Health_Report_{product_name.replace(' ', '_')}.html",
+                mime="text/html",
+                type="primary"
+            )
 
 
 elif app_mode == "Scan from Image":
@@ -618,13 +813,36 @@ elif app_mode == "Scan from Image":
 
                     st.markdown("#### Rekomendasi ML")
                     st.info(recommendation)
+
+                    # --- FITUR NLP UPF ---
+                    upf_ingredients = deteksi_upf_nlp(komposisi)
+                    if len(upf_ingredients) > 0:
+                        st.markdown("---")
+                        st.error("🚨 **Peringatan: Makanan Ultra-Proses (UPF)!**")
+                        st.write("Berdasarkan Analisis Teks (NLP), produk ini mengandung bahan aditif sintetik/industri berikut:")
+                        st.write(", ".join([f"**{ing}**" for ing in upf_ingredients]))
+                        st.caption("Konsumsi makanan ultra-proses yang rutin dikaitkan dengan risiko penyakit metabolik jangka panjang.")
             else:
                  st.metric(label="Skor Risiko Prediksi", value="-")
                  st.info("Jalankan analisis untuk melihat hasil AI.")
 
         # Panggil render module BI
         if analyze_button:
-            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, user_profile)
+            display_profile = kondisi_medis if kondisi_medis != "Tidak Ada" else f"{user_gender} {user_age} Thn"
+            render_holistic_nutrition_metrics(energi, takaran_saji, lemak_total, karbohidrat, protein, gula, natrium, lemak_jenuh, current_threshold, display_profile)
+
+            st.markdown("---")
+            # Generate and Download HTML Report
+            kepadatan_energi = energi / takaran_saji if takaran_saji > 0 else 0
+            html_report = generate_html_report(product_name, risk_score, recommendation, upf_ingredients, nutrition_data, current_threshold, kepadatan_energi, takaran_saji)
+
+            st.download_button(
+                label="📥 Download Executive Health Report (HTML)",
+                data=html_report,
+                file_name=f"Health_Report_OCR_{product_name.replace(' ', '_')}.html",
+                mime="text/html",
+                type="primary"
+            )
 
 
 
@@ -822,13 +1040,67 @@ elif app_mode == "Riwayat Analisis":
         history_df["Kategori Risiko"] = history_df["risk_score"].apply(categorize_risk)
 
         # 1. Tabel Riwayat
-        st.subheader("Data Riwayat")
+        # --- FITUR BARU: HEALTH GRADE & CALENDAR HEATMAP ---
+        st.subheader("Health Grade & Ringkasan Performa")
+
+        avg_score = history_df["risk_score"].mean()
+        total_scan = len(history_df)
+        high_risk_count = len(history_df[history_df["risk_score"] > 50])
+
+        col_g1, col_g2, col_g3 = st.columns(3)
+        with col_g1:
+            # Kalkulasi Grade Kesehatan
+            if avg_score < 25: grade, color = "A (Sangat Baik)", "normal"
+            elif avg_score < 50: grade, color = "B (Cukup Baik)", "off"
+            elif avg_score < 75: grade, color = "C (Berisiko)", "inverse"
+            else: grade, color = "D (Bahaya)", "inverse"
+
+            st.metric("Rata-rata Skor Kesehatan", f"{avg_score:.1f}%", delta=f"Grade: {grade}", delta_color=color)
+
+        with col_g2:
+            st.metric("Total Produk Dianalisis", str(total_scan))
+
+        with col_g3:
+            st.metric("Produk Berisiko Tinggi Ditemukan", str(high_risk_count), delta="-Kurangi konsumsi" if high_risk_count > 0 else "Aman", delta_color="inverse" if high_risk_count > 0 else "normal")
+
+        st.markdown("---")
+
+        # Calendar Heatmap Sederhana menggunakan Heatmap Plotly
+        st.subheader("📅 Calendar Heatmap: Aktivitas Pengecekan Nutrisi")
+
+        # Ekstrak tanggal saja tanpa waktu
+        history_df["day_date"] = pd.to_datetime(history_df["date"]).dt.date
+
+        # Agregasi jumlah scan dan rata-rata skor per hari
+        heatmap_data = history_df.groupby("day_date").agg(
+            total_scans=("product_name", "count"),
+            avg_score=("risk_score", "mean")
+        ).reset_index()
+
+        # Mengubah tanggal ke string agar plotly mudah membacanya
+        heatmap_data["day_date"] = heatmap_data["day_date"].astype(str)
+
+        fig_heat = px.density_heatmap(
+            heatmap_data,
+            x="day_date",
+            y="total_scans",
+            z="avg_score",
+            color_continuous_scale="RdYlGn_r", # Green is low risk, Red is high
+            title="Intensitas Pengecekan Harian (Warna = Tingkat Risiko Rata-rata)",
+            labels={"day_date": "Tanggal", "total_scans": "Frekuensi Produk Di-Scan", "avg_score": "Skor Risiko"}
+        )
+        st.plotly_chart(fig_heat, use_container_width=True)
+        st.caption("Kotak yang berwarna hijau berarti produk yang dikonsumsi rata-rata memiliki risiko rendah. Tetap jaga warnanya agar tidak merah!")
+
+        st.markdown("---")
+
+        st.subheader("Data Riwayat Lengkap")
         st.dataframe(history_df[["date", "product_name", "risk_score", "Kategori Risiko", "profile"]].style.format({"risk_score": "{:.2f}%"}))
 
         st.markdown("---")
 
         # 2. Visualisasi Dashboard
-        st.subheader("Dashboard Analisis Riwayat")
+        st.subheader("Grafik Tren dan Proporsi")
 
         col1, col2 = st.columns(2)
 
@@ -1031,4 +1303,5 @@ elif app_mode == "Simulasi Konsumsi":
             elif percent_lemak_jenuh > 50:
                 st.warning(f"🟡 Perhatian. Konsumsi produk ini menggunakan **{percent_lemak_jenuh:.0f}%** dari alokasi lemak jenuh Anda untuk periode ini.")
 
-            st.caption(f"Perhitungan berdasarkan profil '{user_profile}' selama {simulation_period_months} bulan. Ingat, ini baru dari 1 produk, belum memperhitungkan asupan makanan berat Anda sehari-hari.")
+            display_profile = kondisi_medis if kondisi_medis != "Tidak Ada" else f"{user_gender} {user_age} Thn"
+            st.caption(f"Perhitungan berdasarkan profil '{display_profile}' (TDEE Dinamis) selama {simulation_period_months} bulan. Ingat, ini baru dari 1 produk, belum memperhitungkan asupan makanan berat Anda sehari-hari.")
