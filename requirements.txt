@@ -13,4 +13,4 @@ scipy==1.11.4
 openpyxl>=3.1.2
 lightgbm>=4.3.0
 plotly>=5.18.0
-lightgbm
+keras>=3.0.0
