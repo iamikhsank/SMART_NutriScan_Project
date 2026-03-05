@@ -13,6 +13,7 @@ if not hasattr(scipy.linalg, 'triu'):
 from gensim.models import Word2Vec
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras import Model
+from tensorflow.keras.initializers import Orthogonal
 
 # ==========================================
 # 1. DATA ENGINEERING & CLEANING MODULE
@@ -219,7 +220,7 @@ def load_prediction_models():
     """Loads all models and the fitted scaler."""
     model_path = "models/"
     try:
-        base_cnn_bilstm = tf.keras.models.load_model(os.path.join(model_path, "cb1_bab3.keras"), custom_objects={"Orthogonal": Orthogonal})
+        base_cnn_bilstm = tf.keras.models.load_model(os.path.join(model_path, "cb1_bab3.keras"))
         
         try:
             output_layer = base_cnn_bilstm.get_layer("fusion_feat").output
