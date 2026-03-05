@@ -619,7 +619,7 @@ if app_mode == "Analisis Produk Tunggal":
 
 
 elif app_mode == "Scan from Image":
-    st.header("1. Scan Produk Otomatis (Kamera / Galeri)")
+    st.header("Scan Produk Otomatis (Kamera / Galeri)")
     st.info("Karena letak Informasi Nilai Gizi dan Komposisi Bahan sering terpisah di kemasan, Anda bisa melakukan pemindaian (scan) dua kali menggunakan Kamera langsung atau unggah foto dari Galeri.")
 
     # Inisialisasi variabel parsed_data agar tidak error
@@ -887,45 +887,119 @@ elif app_mode == "Analisis Batch (Excel)":
                 )
 
 elif app_mode == "Perbandingan Produk":
-    st.header("7. Perbandingan Produk (Food Comparison Mode)")
+    st.header("Perbandingan Produk (Food Comparison Mode)")
     st.info("Bandingkan metrik AI (Skor Risiko) dan metrik BI (Kepadatan Energi) dari dua produk sekaligus.")
+
+    # Inisialisasi session state untuk data produk jika belum ada
+    if 'product_a_data' not in st.session_state:
+        st.session_state.product_a_data = {
+            'name': 'Sereal Pagi A', 'takaran': 30.0, 'energi': 150, 'lemak_total': 5.0,
+            'lemak_jenuh': 1.0, 'protein': 3.0, 'karbohidrat': 30.0, 'gula': 12.0,
+            'natrium': 180, 'natrium_benzoat': 0.0, 'komposisi': 'Gandum Utuh, Gula, Garam.'
+        }
+    if 'product_b_data' not in st.session_state:
+        st.session_state.product_b_data = {
+            'name': 'Sereal Pagi B', 'takaran': 30.0, 'energi': 160, 'lemak_total': 6.0,
+            'lemak_jenuh': 3.0, 'protein': 2.0, 'karbohidrat': 28.0, 'gula': 18.0,
+            'natrium': 250, 'natrium_benzoat': 0.0, 'komposisi': 'Jagung, Gula, Sirup Fruktosa, Garam.'
+        }
     
     col1, col2 = st.columns(2)
 
     with col1:
         st.subheader("Produk A")
-        p_a_name = st.text_input("Nama Produk A", "Sereal Pagi A")
-        p_a_takaran = st.number_input("Takaran Saji A (g)", min_value=1.0, value=30.0, format="%.1f")
-        p_a_energi = st.number_input("Energi A (kkal)", min_value=0, value=150)
-        p_a_lemak_total = st.number_input("Lemak Total A (g)", min_value=0.0, value=5.0, format="%.1f")
-        p_a_lemak_jenuh = st.number_input("Lemak Jenuh A (g)", min_value=0.0, value=1.0, format="%.1f")
-        p_a_protein = st.number_input("Protein A (g)", min_value=0.0, value=3.0, format="%.1f")
-        p_a_karbohidrat = st.number_input("Karbohidrat A (g)", min_value=0.0, value=30.0, format="%.1f")
-        p_a_gula = st.number_input("Gula A (g)", min_value=0.0, value=12.0, format="%.1f")
-        p_a_natrium = st.number_input("Natrium A (mg)", min_value=0, value=180)
-        p_a_natrium_benzoat = st.number_input("Natrium Benzoat A (mg)", min_value=0.0, value=0.0, format="%.2f")
-        p_a_komposisi = st.text_area("Komposisi A", "Gandum Utuh, Gula, Garam.", height=100)
-        p_a_garam = p_a_natrium / 400 
+        input_method_a = st.radio("Metode Input Produk A:", ["Input Manual", "Scan dengan Kamera"], key="metode_a")
+
+        if input_method_a == "Scan dengan Kamera":
+            img_file_a = st.camera_input("Ambil Foto Produk A", key="cam_a")
+            if img_file_a:
+                image_a = Image.open(img_file_a)
+                with st.spinner("Memproses gambar Produk A..."):
+                    enhanced_image_a = preprocess_image_for_ocr(image_a)
+                    ocr_results_a = reader.readtext(np.array(enhanced_image_a), detail=0, paragraph=False)
+                    parsed_data_a = parse_nutrition_text(ocr_results_a)
+                    
+                    # Update session state dengan data OCR, jaga nilai yang ada jika OCR gagal
+                    st.session_state.product_a_data['name'] = parsed_data_a.get('product_name') or st.session_state.product_a_data['name']
+                    st.session_state.product_a_data['energi'] = int(parsed_data_a.get('energi') or st.session_state.product_a_data['energi'])
+                    st.session_state.product_a_data['lemak_total'] = parsed_data_a.get('lemak_total') or st.session_state.product_a_data['lemak_total']
+                    st.session_state.product_a_data['lemak_jenuh'] = parsed_data_a.get('lemak_jenuh') or st.session_state.product_a_data['lemak_jenuh']
+                    st.session_state.product_a_data['protein'] = parsed_data_a.get('protein') or st.session_state.product_a_data['protein']
+                    st.session_state.product_a_data['karbohidrat'] = parsed_data_a.get('karbohidrat') or st.session_state.product_a_data['karbohidrat']
+                    st.session_state.product_a_data['gula'] = parsed_data_a.get('gula') or st.session_state.product_a_data['gula']
+                    st.session_state.product_a_data['natrium'] = int(parsed_data_a.get('natrium') or st.session_state.product_a_data['natrium'])
+                    st.session_state.product_a_data['komposisi'] = parsed_data_a.get('komposisi') or st.session_state.product_a_data['komposisi']
+                    st.success("Scan Produk A selesai!")
+
+        # Gunakan data dari session state untuk semua input
+        data_a = st.session_state.product_a_data
+        p_a_name = st.text_input("Nama Produk A", value=data_a['name'], key="name_a")
+        p_a_takaran = st.number_input("Takaran Saji A (g)", min_value=1.0, value=data_a['takaran'], format="%.1f", key="takaran_a")
+        p_a_energi = st.number_input("Energi A (kkal)", min_value=0, value=data_a['energi'], key="energi_a")
+        p_a_lemak_total = st.number_input("Lemak Total A (g)", min_value=0.0, value=data_a['lemak_total'], format="%.1f", key="lemak_a")
+        p_a_lemak_jenuh = st.number_input("Lemak Jenuh A (g)", min_value=0.0, value=data_a['lemak_jenuh'], format="%.1f", key="lemak_jenuh_a")
+        p_a_protein = st.number_input("Protein A (g)", min_value=0.0, value=data_a['protein'], format="%.1f", key="protein_a")
+        p_a_karbohidrat = st.number_input("Karbohidrat A (g)", min_value=0.0, value=data_a['karbohidrat'], format="%.1f", key="karbo_a")
+        p_a_gula = st.number_input("Gula A (g)", min_value=0.0, value=data_a['gula'], format="%.1f", key="gula_a")
+        p_a_natrium = st.number_input("Natrium A (mg)", min_value=0, value=data_a['natrium'], key="natrium_a")
+        p_a_natrium_benzoat = st.number_input("Natrium Benzoat A (mg)", min_value=0.0, value=data_a['natrium_benzoat'], format="%.2f", key="benzoat_a")
+        p_a_komposisi = st.text_area("Komposisi A", value=data_a['komposisi'], height=100, key="komposisi_a")
+        p_a_garam = p_a_natrium / 400
 
     with col2:
         st.subheader("Produk B")
-        p_b_name = st.text_input("Nama Produk B", "Sereal Pagi B")
-        p_b_takaran = st.number_input("Takaran Saji B (g)", min_value=1.0, value=30.0, format="%.1f")
-        p_b_energi = st.number_input("Energi B (kkal)", min_value=0, value=160)
-        p_b_lemak_total = st.number_input("Lemak Total B (g)", min_value=0.0, value=6.0, format="%.1f")
-        p_b_lemak_jenuh = st.number_input("Lemak Jenuh B (g)", min_value=0.0, value=3.0, format="%.1f")
-        p_b_protein = st.number_input("Protein B (g)", min_value=0.0, value=2.0, format="%.1f")
-        p_b_karbohidrat = st.number_input("Karbohidrat B (g)", min_value=0.0, value=28.0, format="%.1f")
-        p_b_gula = st.number_input("Gula B (g)", min_value=0.0, value=18.0, format="%.1f")
-        p_b_natrium = st.number_input("Natrium B (mg)", min_value=0, value=250)
-        p_b_natrium_benzoat = st.number_input("Natrium Benzoat B (mg)", min_value=0.0, value=0.0, format="%.2f")
-        p_b_komposisi = st.text_area("Komposisi B", "Jagung, Gula, Sirup Fruktosa, Garam.", height=100)
+        input_method_b = st.radio("Metode Input Produk B:", ["Input Manual", "Scan dengan Kamera"], key="metode_b")
+
+        if input_method_b == "Scan dengan Kamera":
+            img_file_b = st.camera_input("Ambil Foto Produk B", key="cam_b")
+            if img_file_b:
+                image_b = Image.open(img_file_b)
+                with st.spinner("Memproses gambar Produk B..."):
+                    enhanced_image_b = preprocess_image_for_ocr(image_b)
+                    ocr_results_b = reader.readtext(np.array(enhanced_image_b), detail=0, paragraph=False)
+                    parsed_data_b = parse_nutrition_text(ocr_results_b)
+
+                    st.session_state.product_b_data['name'] = parsed_data_b.get('product_name') or st.session_state.product_b_data['name']
+                    st.session_state.product_b_data['energi'] = int(parsed_data_b.get('energi') or st.session_state.product_b_data['energi'])
+                    st.session_state.product_b_data['lemak_total'] = parsed_data_b.get('lemak_total') or st.session_state.product_b_data['lemak_total']
+                    st.session_state.product_b_data['lemak_jenuh'] = parsed_data_b.get('lemak_jenuh') or st.session_state.product_b_data['lemak_jenuh']
+                    st.session_state.product_b_data['protein'] = parsed_data_b.get('protein') or st.session_state.product_b_data['protein']
+                    st.session_state.product_b_data['karbohidrat'] = parsed_data_b.get('karbohidrat') or st.session_state.product_b_data['karbohidrat']
+                    st.session_state.product_b_data['gula'] = parsed_data_b.get('gula') or st.session_state.product_b_data['gula']
+                    st.session_state.product_b_data['natrium'] = int(parsed_data_b.get('natrium') or st.session_state.product_b_data['natrium'])
+                    st.session_state.product_b_data['komposisi'] = parsed_data_b.get('komposisi') or st.session_state.product_b_data['komposisi']
+                    st.success("Scan Produk B selesai!")
+
+        data_b = st.session_state.product_b_data
+        p_b_name = st.text_input("Nama Produk B", value=data_b['name'], key="name_b")
+        p_b_takaran = st.number_input("Takaran Saji B (g)", min_value=1.0, value=data_b['takaran'], format="%.1f", key="takaran_b")
+        p_b_energi = st.number_input("Energi B (kkal)", min_value=0, value=data_b['energi'], key="energi_b")
+        p_b_lemak_total = st.number_input("Lemak Total B (g)", min_value=0.0, value=data_b['lemak_total'], format="%.1f", key="lemak_b")
+        p_b_lemak_jenuh = st.number_input("Lemak Jenuh B (g)", min_value=0.0, value=data_b['lemak_jenuh'], format="%.1f", key="lemak_jenuh_b")
+        p_b_protein = st.number_input("Protein B (g)", min_value=0.0, value=data_b['protein'], format="%.1f", key="protein_b")
+        p_b_karbohidrat = st.number_input("Karbohidrat B (g)", min_value=0.0, value=data_b['karbohidrat'], format="%.1f", key="karbo_b")
+        p_b_gula = st.number_input("Gula B (g)", min_value=0.0, value=data_b['gula'], format="%.1f", key="gula_b")
+        p_b_natrium = st.number_input("Natrium B (mg)", min_value=0, value=data_b['natrium'], key="natrium_b")
+        p_b_natrium_benzoat = st.number_input("Natrium Benzoat B (mg)", min_value=0.0, value=data_b['natrium_benzoat'], format="%.2f", key="benzoat_b")
+        p_b_komposisi = st.text_area("Komposisi B", value=data_b['komposisi'], height=100, key="komposisi_b")
         p_b_garam = p_b_natrium / 400
 
     st.markdown("---")
     compare_button = st.button("⚖️ Bandingkan Sekarang!", type="primary")
 
     if compare_button:
+        # Update session state dari input manual sebelum analisis
+        st.session_state.product_a_data.update({
+            'name': p_a_name, 'takaran': p_a_takaran, 'energi': p_a_energi, 'lemak_total': p_a_lemak_total,
+            'lemak_jenuh': p_a_lemak_jenuh, 'protein': p_a_protein, 'karbohidrat': p_a_karbohidrat,
+            'gula': p_a_gula, 'natrium': p_a_natrium, 'natrium_benzoat': p_a_natrium_benzoat, 'komposisi': p_a_komposisi
+        })
+        st.session_state.product_b_data.update({
+            'name': p_b_name, 'takaran': p_b_takaran, 'energi': p_b_energi, 'lemak_total': p_b_lemak_total,
+            'lemak_jenuh': p_b_lemak_jenuh, 'protein': p_b_protein, 'karbohidrat': p_b_karbohidrat,
+            'gula': p_b_gula, 'natrium': p_b_natrium, 'natrium_benzoat': p_b_natrium_benzoat, 'komposisi': p_b_komposisi
+        })
+
         with st.spinner("Menganalisis dan membandingkan kedua produk..."):
             nutrition_a = {
                 'energi': p_a_energi, 'lemak_total': p_a_lemak_total, 'lemak_jenuh': p_a_lemak_jenuh,
@@ -944,8 +1018,8 @@ elif app_mode == "Perbandingan Produk":
             st.subheader("Pemenang Analisis Keseluruhan")
             
             # Kalkulasi Kepadatan Energi untuk BI Metric
-            kepadatan_a = p_a_energi / p_a_takaran
-            kepadatan_b = p_b_energi / p_b_takaran
+            kepadatan_a = p_a_energi / p_a_takaran if p_a_takaran > 0 else 0
+            kepadatan_b = p_b_energi / p_b_takaran if p_b_takaran > 0 else 0
 
             res_col1, res_col2 = st.columns(2)
             
@@ -970,8 +1044,8 @@ elif app_mode == "Perbandingan Produk":
 
             st.subheader("Visualisasi Perbandingan Nutrisi (Normalisasi per 100g)")
             # Mengubah ke format per 100g agar perbandingannya apple-to-apple dalam grafik
-            faktor_a = 100 / p_a_takaran
-            faktor_b = 100 / p_b_takaran
+            faktor_a = 100 / p_a_takaran if p_a_takaran > 0 else 0
+            faktor_b = 100 / p_b_takaran if p_b_takaran > 0 else 0
 
             df_compare = pd.DataFrame({
                 "Nutrisi (per 100g)": ["Gula (g)", "Natrium (mg)", "Lemak Jenuh (g)", "Karbohidrat (g)", "Protein (g)"],
@@ -990,8 +1064,9 @@ elif app_mode == "Perbandingan Produk":
             st.plotly_chart(fig_compare_bar, use_container_width=True)
 
 
+
 elif app_mode == "Riwayat Analisis":
-    st.header("9. Riwayat dan Monitoring Konsumsi")
+    st.header("Riwayat dan Monitoring Konsumsi")
     st.info("Berikut adalah riwayat analisis produk yang pernah Anda periksa.")
 
     if len(st.session_state.scan_history) == 0:
@@ -1150,7 +1225,7 @@ elif app_mode == "Riwayat Analisis":
 
 
 elif app_mode == "Edukasi Gizi":
-    st.header("10. Edukasi dan Rekomendasi Nutrisi Cerdas")
+    st.header("Edukasi dan Rekomendasi Nutrisi Cerdas")
 
     st.markdown("### Batas Konsumsi Gizi Harian (Kemenkes RI)")
     st.info("Pedoman umum konsumsi gula, garam, dan lemak (G4G1L5) per hari untuk dewasa:")
@@ -1173,7 +1248,7 @@ elif app_mode == "Edukasi Gizi":
 
 
 elif app_mode == "Simulasi Konsumsi":
-    st.header("8. Simulasi Konsumsi Produk")
+    st.header("Simulasi Konsumsi Produk")
     st.info("Masukkan detail produk dan perkirakan dampak risikonya berdasarkan frekuensi konsumsi Anda.")
 
     st.subheader("Langkah 1: Definisikan Produk")
